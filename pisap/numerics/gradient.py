@@ -144,7 +144,7 @@ class GradBase(object):
         self.grad = self.MtX(self.MX(x) - self.y) # self.y can be a 2D array or a vector
 
 
-class Grad2DSynthese(GradBase):
+class Grad2DAnalysis(GradBase):
     """ Standard 2D gradient class
 
     This class defines the operators for a 2D array
@@ -156,13 +156,14 @@ class Grad2DSynthese(GradBase):
     ft_cls :  Fourier operator derive from base class 'FourierBase'
         Fourier class, for computing Fourier transform (NFFT or FFT)
     """
-    def __init__(self, data, ft_cls):
-        """ Initilize the Grad2DSynthese class.
+    def __init__(self, data, ft_cls, linear_cls=None):
+        """ Initilize the Grad2Danalysis class.
         """
         self.y = data
+        self.analysis = True
         if isinstance(ft_cls, dict):
             if len(ft_cls) > 1:
-                raise ValueError("ft_cls in Grad2DAnalyse should ether be a 1"
+                raise ValueError("ft_cls in Grad2DAnalysis should either be a 1"
                                  " 'key dict' or a 'fourier op class'")
             self.ft_cls = ft_cls.keys()[0](**ft_cls.values()[0])
         else:
@@ -211,8 +212,8 @@ class Grad2DSynthese(GradBase):
         return self.ft_cls.adj_op(x)
 
 
-class Grad2DAnalyse(GradBase):
-    """ Analysis 2D gradient class
+class Grad2DSynthesis(GradBase):
+    """ Synthesis 2D gradient class
 
     This class defines the grad operators for |M*F*invL*alpha - data|**2.
 
@@ -226,12 +227,13 @@ class Grad2DAnalyse(GradBase):
         a linear operator class.
     """
     def __init__(self, data, ft_cls, linear_cls):
-        """ Initilize the Grad2DAnalyse class.
+        """ Initilize the Grad2DSynthesis class.
         """
         self.y = data
+        self.analysis = False
         if isinstance(ft_cls, dict):
             if len(ft_cls) > 1:
-                raise valueerror("ft_cls in grad2danalyse should ether be a 1"
+                raise valueerror("ft_cls in grad2dsynthesis should either be a 1"
                                  " 'key dict' or a 'fourier op class'")
             self.ft_cls = ft_cls.keys()[0](**ft_cls.values()[0])
         else:
