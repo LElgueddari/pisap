@@ -381,42 +381,87 @@ class Grad2DSynthesis_pMRI(GradBase):
         return I
 
 
+class Grad2DAnalysis_pMRI(GradBase):
+    """ 2D Analysis gradient for parallel imaging in MRI.
+
+    This class defines the operators for a 2D array multiplied by sensitivity
+    matrices
+    This class defines the grad operators for
+            \sum_{l=1}^L|M*F* S_l*x - data_l|**2.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Input data array, an array of 2D observed images (i.e. with noise)
+    smaps : np.ndarray
+        Sensitivity maps, 3D array where the first dimanesion fits the number of
+        receiver coils and the two oders are the image dimension
+    ft_cls :  Fourier operator derive from base class 'FourierBase'
+        Fourier class, for computing Fourier transform (NFFT or FFT)
+    """
+    def __init__(self, data, ft_cls, smaps, linear_cls=None):
+        """ Initilize the Grad2DAnalysis_pMRI class.
+        """
+        self.smaps = smaps
+        self.y = data
+        self.analysis = True
+        if isinstance(ft_cls, dict):
+            if len(ft_cls) > 1:
+                raise valueerror("ft_cls in grad2dsynthesis_pMRI should either be a 1"
+                                 " 'key dict' or a 'fourier op class'")
+            self.ft_cls = ft_cls.keys()[0](**ft_cls.values()[0])
+        else:
+            self.ft_cls = ft_cls
+        self.get_spec_rad()
+
+
+    def get_initial_x(self):
+        """ Set initial value of x.
+
+        This method sets the initial value of x to an arrray of random values
+        """
+        return np.random.random((self.ft_cls.img_size,self.ft_cls.img_size)).astype(np.complex)
+
+    def MX(self, x):
+        """ MX
+
+        This method calculates the action of the matrix M on the decomposisiton
+        coefficients in the case of parallel MRI, where a elementwise matrix
+        multiplication is applied between image and sensitivity maps
 
         Parameters
         ----------
-        x : np.ndarray
-            Input data array
+        x: nd-array
+            Input image.
 
         Returns
         -------
-        np.ndarray result
-
-        Notes
-        -----
-        Calculates  M^T (MX)
-
+        z: np.ndarray
+            Multichannel same size as input data
         """
-        return np.sum(self.MtX(self.MX(x)), axis=0)
+        z = np.zeros((self.y.shape))
+        for i in np.arange(z.shape[0]):
+            z[i] = self.ft_cls.op(self.smaps[:,:,i] * x)
+        return z
 
-    def get_grad(self, x):
-        """Get the gradient step
+    def MtX(self, x):
+        """ MtX
 
-        This method calculates the gradient step from the input data in the
-        pMRI context.
+        This method calculates the action of the transpose of the matrix M on
+        the data X, in this case inverse fourier transform of the input data in
+        the frequency domain.
 
         Parameters
         ----------
-        x : np.ndarray
-            Input data array
+        coeffs: np.ndarray
+            Multichannel 3D Fourier coefficients (pMRI model output)
 
         Returns
         -------
-        np.ndarray gradient value
-
-        Notes
-        -----
-
-        Calculates M^T (MX - Y)
-
+        x: nd-array
+            Reconstructed data array decomposisiton coefficients.
         """
-        self.grad = np.sum(self.MtX(self.MX(x) - self.y),axis=0)
+        I = np.zeros((self.ft_cls.img_size, self.ft_cls.img_size), dtype='complex')
+        for i in np.arange(self.smaps.shape[0]):
+            I += self.smaps[i].conjugate() * self.ft_cls.adj_op(x[i])
+        return I
