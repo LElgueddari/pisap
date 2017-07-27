@@ -147,13 +147,17 @@ class ForwardBackward(FISTA):
         if self.cost_func is not None:
             # deactivate early-stopping
             self.cost_func.get_cost(self.z_new)
-
         # Step 1 from alg.10.7.
         self.grad.get_grad(self.z_old)
         y_old = self.z_old - self.grad.inv_spec_rad * self.grad.grad
 
         # Step 2 from alg.10.7.
-        self.x_new = self.prox.op(y_old, extra_factor=self.grad.inv_spec_rad)
+        if self.grad.analysis == False:
+            self.x_new = self.prox.op(y_old, extra_factor=self.grad.inv_spec_rad)
+        else:
+            gamma = self.grad.linear_cls.op(y_old)
+            theta = self.prox_op(gamma,extra_factor=self.grad.inv_spec_rad)
+            self.x_new = self.grad.linear_cls.adj_op(theta)
 
         # Steps 3 and 4 from alg.10.7.
         self.speed_up()
