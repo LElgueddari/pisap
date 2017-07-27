@@ -142,8 +142,8 @@ class NFFT(FourierBase):
         -------
         np.ndarray Fourier transform of the image
         """
-        self.plan.f_hat = img
-        return self.plan.trafo()
+        self.plan.f_hat = img.flatten()
+        return self.plan.trafo()/self.plan.M
 
     def adj_op(self,x):
         """ This method calculates inverse Fourier transform of real or complex
@@ -160,4 +160,4 @@ class NFFT(FourierBase):
         arbitrary type sequence x
         """
         self.plan.f = x
-        return (1.0/self.plan.M) * self.plan.adjoint()
+        return (1.0/self.plan.M) * np.reshape(self.plan.adjoint(),(self.img_size, self.img_size))
