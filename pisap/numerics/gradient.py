@@ -287,57 +287,55 @@ class Grad2DSynthesis(GradBase):
         return self.linear_cls.op(self.ft_cls.adj_op(x))
 
 
-class Grad2DSynthese_Pmri(GradBasic, PowerMethod):
+class Grad2DSynthesis_pMRI(GradBase):
     """ 2D synthesis gradient for parallel imaging in MRI.
 
-    This class defines the operators for a 2D array multiplied by
-    sensitivity matrices
+    This class defines the operators for a 2D array multiplied by sensitivity
+    matrices
     This class defines the grad operators for
-    \sum_{l=1}^L|M*F* S_l*invL*alpha - data_l|**2.
-    """
-    def __init__(self, data, smap, mask, linear_operator):
-        """ Initilize the Grad2DAnalyse class.
+            \sum_{l=1}^L|M*F* S_l*invL*alpha - data_l|**2.
 
-        Parameters
-        ----------
-        data: np.ndarray
-            Input data array, an array of 3D observed images (i.e. with noise)
-            where image size fits the first 2 dimensions and the nb of channels
-            fits the third dimension
-        smap: np.ndarray
-            Sensitivity maps array, 3D array where the first dimension fits
-            the number of channels and the last 2 dimensions fit the image
-            dimensions
-        mask:  np.ndarray
-            The subsampling mask.
-        linear_operator: pisap.numeric.linear.Wavelet
-            A linear operator.
+    Parameters
+    ----------
+    data : np.ndarray
+        Input data array, an array of 2D observed images (i.e. with noise)
+    smaps : np.ndarray
+        Sensitivity maps, 3D array where the first dimanesion fits the number of
+        receiver coils and the two oders are the image dimension
+    ft_cls :  Fourier operator derive from base class 'FourierBase'
+        Fourier class, for computing Fourier transform (NFFT or FFT)
+    linear_cls: class
+        a linear operator class.
+    """
+    def __init__(self, data, ft_cls, linear_cls, smaps):
+        """ Initilize the Grad2DSynthesis_pMRI class.
         """
+        self.smaps = smaps
         self.y = data
-        self.smap = smap
-        self.mask = mask
-        self.linear_operator = linear_operator
-        if mask is None:
-            self.mask = np.ones(data.shape, dtype=int)
-        if smap is None:
-            nb_channels=8
-            self.map = np.ones((data.shape,nb_channels), dtype=float) +\
-                        +1.j*np.ones((data.shape,nb_channels), dtype=float)
-        PowerMethod.__init__(self, self.MtMX, self.y.shape)
+        self.analysis = False
+        if isinstance(ft_cls, dict):
+            if len(ft_cls) > 1:
+                raise valueerror("ft_cls in grad2dsynthesis_pMRI should either be a 1"
+                                 " 'key dict' or a 'fourier op class'")
+            self.ft_cls = ft_cls.keys()[0](**ft_cls.values()[0])
+        else:
+            self.ft_cls = ft_cls
+        self.linear_cls = linear_cls
         self.get_spec_rad()
 
-    def set_initial_x(self):
+
+    def get_initial_x(self):
         """ Set initial value of x.
-        #stamp: We should
+
         This method sets the initial value of x to an arrray of random values
         """
-        fake_data = np.zeros(self.y.shape[0,:,:]).astype(np.complex)
-        coeffs = self.linear_operator.op(fake_data)
-        coeffs = np.random.random(len(coeffs)).astype(np.complex)
-        return coeffs
+        fake_data = np.zeros((self.ft_cls.img_size,self.ft_cls.img_size)).astype(np.complex)
+        trf = self.linear_cls.op(fake_data)
+        trf._data = np.random.random(len(trf._data)).astype(np.complex)
+        return trf
 
-    def MX(self, smap, alpha):
-        """ MX.
+    def MX(self, alpha):
+        """ MX
 
         This method calculates the action of the matrix M on the decomposisiton
         coefficients in the case of parallel MRI, where a elementwise matrix
@@ -345,22 +343,22 @@ class Grad2DSynthese_Pmri(GradBasic, PowerMethod):
 
         Parameters
         ----------
-        smap: nd-array
-            Input sensitivity maps (3D arrray: nb channels x image size)
-            We use here the automatic broadcast of python
         alpha: nd-array
             Input decomposisiton coefficients.
 
         Returns
         -------
-        coeffs: np.ndarray
-            Multichannel 3D Fourier coefficients (pMRI model output)
+        z: np.ndarray
+            Multichannel same size as input data
         """
-        return self.mask * pfft.fft2(self.smap *
-                                     self.linear_operator.adj_op(alpha))
+        z = []
+        im = self.linear_cls.adj_op(alpha)
+        for i in np.arange(self.y.shape[0]):
+            z.append(self.ft_cls.op(self.smaps[:,:,i] * im))
+        return np.stack(z)
 
-    def MtX(self, smap, coeffs):
-        """ MtX.
+    def MtX(self, x):
+        """ MtX
 
         This method calculates the action of the transpose of the matrix M on
         the data X, in this case inverse fourier transform of the input data in
@@ -368,8 +366,6 @@ class Grad2DSynthese_Pmri(GradBasic, PowerMethod):
 
         Parameters
         ----------
-        smap: nd-array
-            Input sensitivity maps (3D arrray: nb channels x image size)
         coeffs: np.ndarray
             Multichannel 3D Fourier coefficients (pMRI model output)
 
@@ -378,15 +374,13 @@ class Grad2DSynthese_Pmri(GradBasic, PowerMethod):
         x: nd-array
             Reconstructed data array decomposisiton coefficients.
         """
-        return self.linear_operator.op(self.smap.conjugate() *
-                                       pfft.ifft2(self.mask * coeffs)))
+        I = np.zeros((self.ft_cls.img_size, self.ft_cls.img_size), dtype='complex')
+        I = self.linear_cls.op(I)
+        for i in np.arange(self.smaps.shape[2]):
+            I += self.linear_cls.op((self.smaps[:,:,i]).conjugate() * self.ft_cls.adj_op(x[i]))
+        return I
 
-    def MtMX(self, smap, coeffs):
-        """M^T M X
 
-        This method calculates the action of the transpose of the matrix M on
-        the action of the matrix M on the data X in the context of pMRI.
-        This requires summing over all channels, hence over the first dimension
 
         Parameters
         ----------
