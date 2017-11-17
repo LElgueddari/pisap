@@ -465,3 +465,93 @@ class Grad2DAnalysis_pMRI(GradBase):
         for i in np.arange(self.smaps.shape[0]):
             I += self.smaps[i].conjugate() * self.ft_cls.adj_op(x[i])
         return I
+
+class Grad2D(GradBase):
+    """ Standard 2D gradient class
+
+    This class defines the operators for a 2D array
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Input data array, an array of 2D observed images (i.e. with noise)
+    X  :  Is a matrix that defines a dot operation
+    """
+    def __init__(self, data, X):
+        """ Initilize the Grad2Danalysis class.
+        """
+        self.y = data
+        self.X = X
+        self.Gram = np.dot(np.conj(X.T), X)
+        self.cov = np.dot(np.conj(X.T), data)
+        self.analysis = False
+        try :
+            np.dot(self.X.T,self.y)
+        except:
+            raise ValueError('Matrix multiplication not aligned', self.X.shape,
+                            self.y.shape)
+        self.get_spec_rad()
+
+    def get_initial_x(self):
+        """ Set initial value of x.
+
+        This method sets the initial value of x to an arrray of random values
+        """
+        n_x, m_x = self.X.shape
+        n_y, m_y = self.y.shape
+        return np.random.random((m_x, m_y)).astype(np.complex)
+
+    def get_grad(self, x):
+        """ Get the gradient step
+
+        This method calculates the gradient step from the input data
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Input data array
+
+        Returns
+        -------
+        np.ndarray gradient value
+
+        Notes
+        -----
+
+        Calculates M^T (MX - Y)
+        """
+        self.grad = np.dot(self.Gram, x) - self.cov
+
+    def MX(self, x):
+        """ MX
+
+        This method calculates the action of the matrix M on the data X, in
+        this case fourier transform of the the input data
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Input data array, an array of recovered 2D images
+
+        Returns
+        -------
+        np.ndarray result
+        """
+        return np.dot(self.X,x)
+
+    def MtX(self, x):
+        """ MtX
+
+        This method calculates the action of the transpose of the matrix M on
+        the data X, in this case inverse fourier transform of the input data
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Input data array, an array of recovered 2D images
+
+        Returns
+        -------
+        np.ndarray result
+        """
+        return np.dot(np.conj(self.X.T), x)
