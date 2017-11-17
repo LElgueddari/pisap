@@ -96,3 +96,48 @@ class SoftThreshold(object):
         data._data = soft_thresholding(data._data, threshold._data)
         return data
 
+class SoftThreshold_DL(object):
+    """ Soft threshold proximity operator
+
+    This class defines the threshold proximity operator
+
+    Parameters
+    ----------
+    weights : np.ndarray
+        Input array of weights
+    """
+    def __init__(self, weights):
+        self.update_weights(weights)
+
+    def update_weights(self, weights):
+        """ Update weights
+
+        This method update the values of the weights
+
+        Parameters
+        ----------
+        weights :DictionaryBase
+            Input array of weights
+        """
+        self.weights = weights
+
+    def op(self, data, extra_factor=1.0):
+        """ Operator
+
+        This method returns the input data thresholded by the weights
+
+        Parameters
+        ----------
+        data : DictionaryBase
+            Input data array
+        extra_factor : float
+            Additional multiplication factor
+
+        Returns
+        -------
+        DictionaryBase thresholded data
+
+        """
+        threshold = self.weights * extra_factor
+        data = soft_thresholding(data, threshold)
+        return data
