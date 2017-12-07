@@ -17,7 +17,6 @@ from .utils import convert_locations_to_mask
 
 # Third party import
 # import pynfft
-import numpy as np
 import scipy.fftpack as pfft
 
 
@@ -133,9 +132,9 @@ class NFFT2(FourierBase):
         shape: tuple of int
             shape of the image (not necessarly a square matrix).
         """
-        self.plan = pynfft.NFFT(N=shape, M=len(samples))
-        self.shape = shape
-        self.samples = samples
+        self.plan = pynfft.NFFT(N=img_shape, M=len(samples_locations))
+        self.shape = img_shape
+        self.samples = samples_locations
         self.plan.x = self.samples
         self.plan.precompute()
 
