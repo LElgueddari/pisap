@@ -100,6 +100,24 @@ class GradBase(GradBasic):
         self.spec_rad = coef_mul * x_new_norm
         self.inv_spec_rad = 1.0 / self.spec_rad
 
+    def get_cost(self, x):
+        """ Gettng the cost.
+
+        This method calculates the cost function of the differentiable part of
+        the objective function.
+
+        Parameters
+        ----------
+        x: np.ndarray
+        input 2D data array.
+
+        Returns
+        -------
+        result: float
+        The result of the differentiablepart.
+        """
+        return 0.5 * (np.abs(self.MX(x).flatten() - self.y.flatten())**2).sum()
+
 
 class GradAnalysis2(GradBase):
     """ Gradient 2D analysis class.

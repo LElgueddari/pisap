@@ -16,7 +16,7 @@ Fourier operators for cartesian and non-cartesian space.
 from .utils import convert_locations_to_mask
 
 # Third party import
-# import pynfft
+import pynfft
 import scipy.fftpack as pfft
 
 
@@ -122,7 +122,7 @@ class NFFT2(FourierBase):
         shape of the image (not necessarly a square matrix).
     """
 
-    def __init__(self, samples_locations, img_shape):
+    def __init__(self, samples, shape):
         """ Initilize the 'NFFT2' class.
 
         Parameters
@@ -132,9 +132,9 @@ class NFFT2(FourierBase):
         shape: tuple of int
             shape of the image (not necessarly a square matrix).
         """
-        self.plan = pynfft.NFFT(N=img_shape, M=len(samples_locations))
-        self.shape = img_shape
-        self.samples = samples_locations
+        self.plan = pynfft.NFFT(N=shape, M=len(samples))
+        self.shape = shape
+        self.samples = samples
         self.plan.x = self.samples
         self.plan.precompute()
 
@@ -170,4 +170,4 @@ class NFFT2(FourierBase):
             inverse 2D discrete Fourier transform of the input coefficients.
         """
         self.plan.f = x
-        return (1.0 / self.plan.M) * self.plan.adjoint()
+        return (1.0 / self.plan.M) * self.plan.adjoint().reshape(self.shape)
