@@ -18,92 +18,96 @@ import pysap
 import numpy
 from sporco.admm import cbpdn
 
+
 class ConvSparseCode2D(object):
     """ The 2D convolutional sparse coding class.
     """
-def __init__(self, dictionary_atoms, lbd=5e-2, verbose=False,
-            sparse_cod_iter=200, relative_tolerance=5e-3):
-    """ Initialize the 'ConvSparseCode2D' class.
 
-    Parameters
-    ----------
+    def __init__(self, dictionary_atoms, image_shape, lbd=5e-2, verbose=False,
+                 sparse_cod_iter=200, relative_tolerance=5e-3):
+        """ Initialize the 'ConvSparseCode2D' class.
 
-    """
-    self.lbd = lbd
-    self.opt = cbpdn.ConvBPDN.Options({'Verbose': verbose,
-                                  'MaxMainIter': sparse_cod_iter,
-                                  'RelStopTol': relative_tolerance ,
-                                  'AuxVarObj': False})
-    self.atoms = dictionary_atoms
-    self.coeffs_shape = None
-    self.coder = cbpdn.ConvBPDN(self.atoms, None, self.lbd, self.opt, dimK=0)
+        Parameters
+        ----------
 
-def op(self, data):
-    """ Define the wavelet operator.
+        """
+        self.lbd = lbd
+        self.opt = cbpdn.ConvBPDN.Options({'Verbose': verbose,
+                                           'MaxMainIter': sparse_cod_iter,
+                                           'RelStopTol': relative_tolerance,
+                                           'AuxVarObj': False})
+        self.atoms = dictionary_atoms
+        self.coeffs_shape = None
+        self.coder = cbpdn.ConvBPDN(self.atoms, numpy.zeros(image_shape),
+                                    self.lbd, self.opt, dimK=0)
 
-    This method returns the input data convolved with the learned atoms.
+    def op(self, data):
+        """ Define the wavelet operator.
 
-    Parameters
-    ----------
-    data: ndarray or Image
-        input 2D data array.
+        This method returns the input data convolved with the learned atoms.
 
-    Returns
-    -------
-    coeffs: ndarray
-        the sparse coefficients.
-    """
-    if isinstance(data, numpy.ndarray):
-        data = pysap.Image(data=data)
-    self.coder.Y = data
-    coeffs = self.coder.solve()
-    self.coeffs_shape = coeffs
-    return coeffs.flatten()
+        Parameters
+        ----------
+        data: ndarray or Image
+            input 2D data array.
 
-def adj_op(self, coeffs, dtype="array"):
-    """ Define the wavelet adjoint operator.
+        Returns
+        -------
+        coeffs: ndarray
+            the sparse coefficients.
+        """
+        # if ~isinstance(data, numpy.ndarray):
+        #     data = data.data
+        self.coder = cbpdn.ConvBPDN(self.atoms, numpy.abs(data),
+                                    self.lbd, self.opt, dimK=0)
+        coeffs = self.coder.solve()
+        self.coeffs_shape = coeffs.shape
+        return coeffs.flatten()
 
-    This method returns the reconsructed image.
+    def adj_op(self, coeffs, dtype="array"):
+        """ Define the wavelet adjoint operator.
 
-    Parameters
-    ----------
-    coeffs: ndarray
-        the sparse coefficients.
-    dtype: str, default 'array'
-        if 'array' return the data as a ndarray, otherwise return a
-        pysap.Image.
+        This method returns the reconsructed image.
 
-    Returns
-    -------
-    data: ndarray
-        the reconstructed data.
-    """
-    image = self.coder.reconstruct(coeffs.reshape(self.coeffs_shape))
-    if dtype == "array":
-        return image.data
-    return image
+        Parameters
+        ----------
+        coeffs: ndarray
+            the sparse coefficients.
+        dtype: str, default 'array'
+            if 'array' return the data as a ndarray, otherwise return a
+            pysap.Image.
 
-def l2norm(self, shape):
-    """ Compute the L2 norm.
+        Returns
+        -------
+        data: ndarray
+            the reconstructed data.
+        """
+        image = self.coder.reconstruct(coeffs.reshape(self.coeffs_shape))
+        if dtype == "array":
+            return image.data
+        return image
 
-    Parameters
-    ----------
-    shape: uplet
-        the data shape.
+    def l2norm(self, shape):
+        """ Compute the L2 norm.
 
-    Returns
-    -------
-    norm: float
-        the L2 norm.
-    """
-    # Create fake data
-    shape = numpy.asarray(shape)
-    shape += shape % 2
-    fake_data = numpy.zeros(shape)
-    fake_data[list(zip(shape // 2))] = 1
+        Parameters
+        ----------
+        shape: uplet
+            the data shape.
 
-    # Call mr_transform
-    data = self.op(fake_data)
+        Returns
+        -------
+        norm: float
+            the L2 norm.
+        """
+        # Create fake data
+        shape = numpy.asarray(shape)
+        shape += shape % 2
+        fake_data = numpy.zeros(shape)
+        fake_data[list(zip(shape // 2))] = 1
 
-    # Compute the L2 norm
-    return numpy.linalg.norm(data)
+        # Call mr_transform
+        data = self.op(fake_data)
+
+        # Compute the L2 norm
+        return numpy.linalg.norm(data)
