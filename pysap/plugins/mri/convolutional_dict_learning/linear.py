@@ -38,8 +38,7 @@ class ConvSparseCode2D(object):
                                            'AuxVarObj': False})
         self.atoms = dictionary_atoms
         self.coeffs_shape = None
-        self.coder = cbpdn.ConvBPDN(self.atoms, numpy.zeros(image_shape),
-                                    self.lbd, self.opt, dimK=0)
+        
 
     def op(self, data):
         """ Define the wavelet operator.
@@ -58,6 +57,7 @@ class ConvSparseCode2D(object):
         """
         # if ~isinstance(data, numpy.ndarray):
         #     data = data.data
+
         self.coder = cbpdn.ConvBPDN(self.atoms, numpy.abs(data),
                                     self.lbd, self.opt, dimK=0)
         coeffs = self.coder.solve()
@@ -83,9 +83,7 @@ class ConvSparseCode2D(object):
             the reconstructed data.
         """
         image = self.coder.reconstruct(coeffs.reshape(self.coeffs_shape))
-        if dtype == "array":
-            return image.data
-        return image
+        return numpy.squeeze(image)
 
     def l2norm(self, shape):
         """ Compute the L2 norm.
