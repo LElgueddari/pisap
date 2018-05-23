@@ -52,6 +52,8 @@ class NuclearNorm(object):
         DictionaryBase thresholded data
 
         """
+        import ipdb;
+        ipdb.set_trace()
         P_r = extract_patches_2d(np.moveaxis(np.real(data), -1, 0),
                                  self.patch_shape)
         P_i = extract_patches_2d(np.moveaxis(np.imag(data), -1, 0),

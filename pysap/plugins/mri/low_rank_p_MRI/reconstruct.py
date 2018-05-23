@@ -147,7 +147,7 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
                         mu=1e-6, tau=None, sigma=None, relaxation_factor=1.0,
                         nb_of_reweights=1, max_nb_of_iter=150,
                         add_positivity=False, atol=1e-4, verbose=0,
-                        patches_shape=(10, 10)):
+                        patches_shape=(16, 16)):
     """ The Condat-Vu sparse reconstruction with reweightings.
 
     .. note:: At the moment, supports only 2D data.
