@@ -18,7 +18,9 @@ This module contains all the utils tools needed in the p_MRI reconstruction.
 
 # Third party import
 import numpy as np
-
+from sklearn.feature_extraction.image import extract_patches
+from sklearn.feature_extraction.image import _compute_n_patches
+# from sklearn.feature_extraction.image import
 
 def prod_over_maps(S, X):
     """
@@ -106,3 +108,47 @@ def check_lipschitz_cst(f, x_shape, lipschitz_cst, max_nb_of_iter=10):
                                                      np.linalg.norm(x-y)))
 
     return is_lips_cst
+
+def extract_patches_2d(image, patch_shape, overlapping_factor=0):
+
+    i_h, i_w = image.shape[:2]
+    p_h, p_w = patch_shape
+    patch_step_size = (int(p_h/overlapping_factor),
+                       int(p_w/overlapping_factor),
+                       image.shape[-1])
+    if p_h > i_h:
+        raise ValueError("Height of the patch should be less than the height"
+                         " of the image.")
+
+    if p_w > i_w:
+        raise ValueError("Width of the patch should be less than the width"
+                         " of the image.")
+    image = image.reshape((i_h, i_w, -1))
+    n_colors = image.shape[-1]
+    extracted_patches = extract_patches(image,
+                                        patch_shape=(p_h, p_w, n_colors),
+                                        extraction_step=patch_step_size)
+
+    n_patches = _compute_n_patches(i_h, i_w, p_h, p_w, None)
+
+    patches = extracted_patches
+
+    patches = patches.reshape(-1, p_h, p_w, n_colors)
+    # remove the color dimension if useless
+    if patches.shape[-1] == 1:
+        return patches.reshape((n_patches, p_h, p_w))
+    else:
+        return patches
+
+def reconstruct_non_overlapped_patches_2d(patches, img_size):
+    patches_size = patches.shape[1:-1]
+    number_of_patch_x = int(img_size[0]/patches_size[0])
+    number_of_patch_y = int(img_size[1]/patches_size[1])
+    IMG = np.zeros((patches.shape[-1], *img_size), dtype=patches.dtype)
+    for idx_y in range(number_of_patch_y):
+        for idx_x in range(number_of_patch_x):
+            patch_idx = idx_x*number_of_patch_y+idx_y
+            patch_n = np.moveaxis(patches[patch_idx], -1, 0)
+            IMG[:, idx_x*patches_size[0]: (idx_x+1)*patches_size[0],
+                idx_y*patches_size[1]: (idx_y+1)*patches_size[1]] = patch_n
+    return IMG
