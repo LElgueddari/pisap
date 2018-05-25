@@ -21,59 +21,12 @@ from pysap.base.utils import unflatten
 import numpy
 
 
-class Wavelet2(object):
+class Identity(object):
     """ The 2D wavelet transform class.
     """
-    def __init__(self, wavelet_name, nb_scale=4, verbose=0):
-        """ Initialize the 'Wavelet2' class.
-
-        Parameters
-        ----------
-        wavelet_name: str
-            the wavelet name to be used during the decomposition.
-        nb_scales: int, default 4
-            the number of scales in the decomposition.
-        verbose: int, default 0
-            the verbosity level.
-        """
-        self.nb_scale = nb_scale
-        if wavelet_name not in pysap.AVAILABLE_TRANSFORMS:
-            raise ValueError(
-                "Unknown transformation '{0}'.".format(wavelet_name))
-        transform_klass = pysap.load_transform(wavelet_name)
-        self.transform = transform_klass(
-            nb_scale=self.nb_scale, verbose=verbose)
-        self.coeffs_shape = None
-
     def op(self, data):
-        """ Define the wavelet operator.
-
-        This method returns the input data convolved with the wavelet filter.
-
-        Parameters
-        ----------
-        data: ndarray or Image
-            input 2D data array.
-
-        Returns
-        -------
-        coeffs: ndarray
-            the wavelet coefficients.
-        """
-        if isinstance(data, numpy.ndarray):
-            data = pysap.Image(data=data)
-        coeffs = []
-        self.coeffs_shape = []
-        print(data.shape)  # XXX : to be removed
-        for channel in range(data.shape[0]):
-            print(data.shape)  # XXX : to be removed
-            self.transform.data = data[channel]
-            self.transform.analysis()
-            _coeffs, _coeffs_shape = flatten(self.transform.analysis_data)
-            coeffs.append(_coeffs)
-            self.coeffs_shape.append(_coeffs_shape)
-        numpy.asarray(self.coeffs_shape)
-        return numpy.asarray(coeffs)
+        self.coeffs_shape = data.shape
+        return data
 
     def adj_op(self, coeffs):
         """ Define the wavelet adjoint operator.
@@ -90,12 +43,7 @@ class Wavelet2(object):
         data: ndarray
             the reconstructed data.
         """
-        images = []
-        for channel in range(coeffs.shape[0]):
-            self.transform.analysis_data = unflatten(coeffs[channel],
-                                                     self.coeffs_shape[channel])
-            images.append(self.transform.synthesis().data)
-        return numpy.asarray(images, dtype='complex128')
+        return coeffs
 
     def l2norm(self, shape):
         """ Compute the L2 norm.
