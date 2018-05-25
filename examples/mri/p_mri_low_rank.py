@@ -19,9 +19,10 @@ We also add some gaussian noise in the image space.
 import pysap
 from pysap.data import get_sample_data
 from pysap.plugins.mri.reconstruct.reconstruct import FFT2
-from pysap.plugins.mri.low_rank_p_MRI.linear import Wavelet2
+from pysap.plugins.mri.low_rank_p_MRI.linear import Identity
 from pysap.plugins.mri.parallel_mri.utils import prod_over_maps
 from pysap.plugins.mri.parallel_mri.utils import function_over_maps
+from pysap.plugins.mri.low_rank_p_MRI.reconstruct import sparse_rec_fista
 from pysap.plugins.mri.low_rank_p_MRI.reconstruct import sparse_rec_condatvu
 from pysap.plugins.mri.reconstruct.utils import convert_mask_to_locations
 from pysap.plugins.mri.low_rank_p_MRI.gradient import Grad2D_pMRI
@@ -62,10 +63,9 @@ kspace_data = []
 [kspace_data.append(mask * pfft.fft2(Sl[:, :, channel]))
     for channel in range(Sl.shape[-1])]
 kspace_data = np.asarray(kspace_data)
-import ipdb; ipdb.set_trace()
 # Get the locations of the kspace samples
 kspace_loc = convert_mask_to_locations(mask.data)
-
+print(kspace_data.shape)
 
 #############################################################################
 # FISTA optimization
@@ -77,21 +77,36 @@ kspace_loc = convert_mask_to_locations(mask.data)
 
 # Start the FISTA reconstruction
 # import ipdb; ipdb.set_trace()
-max_iter = 10
+max_iter = 25
 
-linear_op = Wavelet2(wavelet_name="UndecimatedBiOrthogonalTransform",
-                     nb_scale=4)
+linear_op = Identity()
 
 fourier_op = FFT2(samples=kspace_loc, shape=(512, 512))
 
 gradient_op_cd = Grad2D_pMRI(data=kspace_data,
                              fourier_op=fourier_op)
 
-x_final, transform = sparse_rec_condatvu(
+x_final, cost = sparse_rec_fista(
+    gradient_op=gradient_op_cd,
+    linear_op=linear_op,
+    mu=0,
+    lambda_init=1.0,
+    max_nb_of_iter=max_iter,
+    atol=1e-4,
+    verbose=1,
+    get_cost=True,
+    patches_shape=(512, 512))
+
+image_rec = pysap.Image(data=np.sqrt(np.sum(np.abs(x_final)**2, axis=0)))
+image_rec.show()
+plt.plot(cost)
+plt.show()
+
+x_final, y_final = sparse_rec_condatvu(
     gradient_op=gradient_op_cd,
     linear_op=linear_op,
     std_est=None,
-    mu=1e-7,
+    mu=0,
     tau=None,
     sigma=None,
     relaxation_factor=1.0,
@@ -99,7 +114,10 @@ x_final, transform = sparse_rec_condatvu(
     max_nb_of_iter=max_iter,
     add_positivity=False,
     atol=1e-4,
-    verbose=1)
+    verbose=1,
+    patches_shape=(512, 512))
+image_rec_y = pysap.Image(data=np.sqrt(np.sum(np.abs(y_final)**2, axis=0)))
+image_rec_y.show()
 
-image_rec = pysap.Image(data=np.abs(x_final))
+image_rec = pysap.Image(data=np.sqrt(np.sum(np.abs(x_final)**2, axis=0)))
 image_rec.show()
