@@ -32,6 +32,7 @@ from modopt.opt.linear import Identity
 from modopt.opt.proximity import Positivity
 from modopt.opt.algorithms import Condat, ForwardBackward
 from modopt.opt.reweight import cwbReweight
+import progressbar
 
 
 def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
@@ -76,7 +77,7 @@ def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
     start = time.clock()
 
     # Define the initial primal and dual solutions
-    x_init = np.zeros((512, 512, 32), dtype=np.complex)
+    x_init = np.zeros((32, 512, 512), dtype=np.complex)  #TODO: Making more general
     alpha = linear_op.op(x_init)
     alpha[...] = 0.0
 
@@ -92,18 +93,18 @@ def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
         print("-" * 40)
 
     # Define the proximity dual operator
-    weights = copy.deepcopy(alpha)
-    weights[...] = mu
+    weights = mu
     prox_op = NuclearNorm(weights, patches_shape)
 
     # Define the optimizer
     cost_op = None
     opt = ForwardBackward(
-        x=alpha,
+        x=x_init,
         grad=gradient_op,
         prox=prox_op,
         cost=cost_op,
-        auto_iterate=False)
+        auto_iterate=False,
+        beta_param=gradient_op.inv_spec_rad)
 
     # Perform the reconstruction
 
@@ -113,16 +114,19 @@ def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
     if get_cost:
         cost = np.zeros(max_nb_of_iter)
 
-    for i in range(max_nb_of_iter):
-        opt._update()
-        if get_cost:
-            cost[i] = gradient_op.get_cost(opt._x_new) + \
-                      prox_op.get_cost(opt._x_new)
-        if opt.converge:
-            print(' - Converged!')
+    with progressbar.ProgressBar(redirect_stdout=True,
+                                 max_value=max_nb_of_iter) as bar:
+        for idx in range(max_nb_of_iter):
+            opt._update()
+            bar.update(idx)
             if get_cost:
-                cost = cost[0:i]
-            break
+                cost[idx] = gradient_op.get_cost(opt._x_new) + \
+                          prox_op.get_cost(opt._x_new)
+            if opt.converge:
+                print(' - Converged!')
+                if get_cost:
+                    cost = cost[0:idx]
+                break
 
     opt.x_final = opt._x_new
     end = time.clock()
@@ -137,9 +141,9 @@ def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
     x_final = linear_op.adj_op(opt.x_final)
 
     if get_cost:
-        return x_final, linear_op.transform, cost
+        return x_final, cost
     else:
-        return x_final, linear_op.transform
+        return x_final
 
 
 def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
@@ -212,8 +216,8 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
             "Unrecognize std estimation method '{0}'.".format(std_est_method))
 
     # Define the initial primal and dual solutions
-    x_init = np.zeros((32, 512, 512), dtype=np.complex)
-    weights = linear_op.op(x_init)
+    # x_init = np.zeros((32, 512, 512), dtype=np.complex)
+    weights = 1.0  # linear_op.op(x_init)
 
     # Define the weights used during the thresholding in the dual domain,
     # the reweighting strategy, and the prox dual operator
@@ -236,7 +240,7 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
 
     # Case3: manual regularization mode, no reweighting
     else:
-        weights[...] = mu
+        weights = mu
         reweight_op = None
         prox_dual_op = NuclearNorm(weights, patches_shape)
         nb_of_reweights = 0
@@ -244,7 +248,7 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
     # Define the Condat Vu optimizer: define the tau and sigma in the
     # Condat-Vu proximal-dual splitting algorithm if not already provided.
     # Check also that the combination of values will lead to convergence.
-    norm = linear_op.l2norm((32, 512, 512))  # XXX to be removed
+    norm = linear_op.l2norm((32, 512, 512))  # TODO make it more general
     lipschitz_cst = gradient_op.spec_rad
     if sigma is None:
         sigma = 0.5
@@ -261,7 +265,7 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
     dual = linear_op.op(primal)
     dual = np.asarray(dual)
 
-    print('HERRRREE ------>', dual.shape)  # XXX to be removed
+    print('HERRRREE ------>', dual.shape)  # TODO to be removed
     dual[...] = 0.0
 
     # Welcome message
@@ -317,9 +321,11 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
     # Perform the first reconstruction
     if verbose > 0:
         print("Starting optimization...")
-
-    for i in range(max_nb_of_iter):
-            opt._update()
+    with progressbar.ProgressBar(redirect_stdout=True,
+                                 max_value=max_nb_of_iter) as bar:
+        for idx in range(max_nb_of_iter):
+                opt._update()
+                bar.update(idx)
 
     opt.x_final = opt._x_new
     opt.y_final = opt._y_new
@@ -356,7 +362,5 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
 
     # Get the final solution
     x_final = opt.x_final
-    linear_op.transform.analysis_data = unflatten(
-        opt.y_final, linear_op.coeffs_shape)
 
-    return x_final, linear_op.transform
+    return x_final, opt.y_final
