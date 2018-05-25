@@ -82,20 +82,19 @@ class NuclearNorm(object):
         DictionaryBase thresholded data
 
         """
+        threshold = self.weights * extra_factor
         if data.shape[1:] == self.patch_shape:
-            images = self._prox_nuclear_norm(np.reshape(
+            images = np.moveaxis(data, 0, -1)
+            images = self._prox_nuclear_norm(patch=np.reshape(
                 np.moveaxis(data, 0, -1),
-                (np.prod(self.patch_shape), data.shape[0])))
-            return np.moveaxis(np.reshape(
-                    images,
-                    (*self.patch_shape,
-                     data.shape[0])), 0, -1)
+                (np.prod(self.patch_shape), data.shape[0])),
+                threshold=threshold)
+            return np.moveaxis(images, -1, 0)
         elif self.overlapping_factor == 1:
             P = extract_patches_2d(np.moveaxis(data, 0, -1),
                                    self.patch_shape,
                                    overlapping_factor=self.overlapping_factor)
             number_of_patches = P.shape[0]
-            threshold = self.weights * extra_factor
             num_cores = num_cores
             if num_cores==1:
                 for idx in range(number_of_patches):
