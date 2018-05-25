@@ -54,7 +54,26 @@ class Test_extraction_reconstruction_patches(unittest.TestCase):
         mismatch = (1. - np.mean(
             np.allclose(reconstructed_data, data)))
         print("      mismatch = ", mismatch)
-        print(" Test proximity operator doesn't distord input")
+        print(" Proximity operator doesn't distord input when patches are",
+              "applied")
+
+    def test_proximity_op_NuclearNorm_for_zeros_thr_no_patches(self):
+        data_shape = (32, 64, 128)
+        patch_shape = (64, 128)
+        weights = 0
+        data = np.random.randn(*data_shape) + 1j * np.random.randn(*data_shape)
+        prox_op = NuclearNorm(weights=weights,
+                              patch_shape=patch_shape,
+                              overlapping_factor=1)
+        reconstructed_data = prox_op.op(
+            data=data,
+            extra_factor=1.0,
+            num_cores=1
+            )
+        mismatch = (1. - np.mean(
+            np.allclose(reconstructed_data, data)))
+        print("      mismatch = ", mismatch)
+        print(" Proximity operator doesn't distord input in no patches setting")
 
 if __name__ == "__main__":
     unittest.main()
