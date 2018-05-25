@@ -13,7 +13,11 @@ Overload the proximity class from modopt.
 
 import numpy as np
 from sklearn.feature_extraction.image import reconstruct_from_patches_2d
-from sklearn.feature_extraction.image import extract_patches_2d
+from pysap.plugins.mri.low_rank_p_MRI.utils import extract_patches_2d
+from pysap.plugins.mri.low_rank_p_MRI.utils import \
+                                    reconstruct_non_overlapped_patches_2d
+from joblib import Parallel, delayed
+import multiprocessing
 
 
 class NuclearNorm(object):
@@ -30,12 +34,36 @@ class NuclearNorm(object):
         Threshold type (default is 'soft')
     patch_size: int
         Size of the patches to impose the low rank constraints
+    overlapping_factor: int
+        if 1 no overlapping will be made,
+        if = 2,means 2 patches overlaps
     """
-    def __init__(self, weights, patch_shape):
+    def __init__(self, weights, patch_shape, overlapping_factor=1):
+        """
+        Parameters:
+        -----------
+        """
         self.weights = weights
         self.patch_shape = patch_shape
+        self.overlapping_factor = overlapping_factor
+        if self.overlapping_factor == 1:
+            print("Patches doesn't overlap")
 
-    def op(self, data, extra_factor=1.0):
+    def _prox_nuclear_norm(self, patch, threshold):
+        u, s, vh = np.linalg.svd(np.reshape(
+            patch,
+            (np.prod(self.patch_shape), patch.shape[-1])),
+            full_matrices=False)
+        s = s * np.maximum(1 - threshold / np.maximum(
+                                            np.finfo(np.float32).eps,
+                                            np.abs(s)), 0)
+        patch = np.reshape(
+            np.dot(u * s, vh),
+            (*self.patch_shape, patch.shape[-1]))
+        return patch
+
+
+    def op(self, data, extra_factor=1.0, num_cores=1):
         """ Operator
 
         This method returns the input data thresholded by the weights
@@ -46,32 +74,68 @@ class NuclearNorm(object):
             Input data array
         extra_factor : float
             Additional multiplication factor
+        num_cores: int
+            Number of cores used to parrallelize the computation
 
         Returns
         -------
         DictionaryBase thresholded data
 
         """
-        import ipdb;
-        ipdb.set_trace()
-        P_r = extract_patches_2d(np.moveaxis(np.real(data), -1, 0),
-                                 self.patch_shape)
-        P_i = extract_patches_2d(np.moveaxis(np.imag(data), -1, 0),
-                                 self.patch_shape)
-        P = P_r + 1j * P_i
-        number_of_patches = P.shape[2]
-        threshold = self.weights * extra_factor
-        for patch_n in range(number_of_patches):
-            u, s, vh = np.linalg.svd(np.reshape(
-             P[:, :, patch_n, :], np.prod(self.patches_shape), data.shape[0]))
-            s = s * np.maximum(1 - threshold / np.maximum(
-                                                    np.finfo(np.float32).eps,
-                                                    np.abs(s)), 0)
-            P[:, :, patch_n, :] = np.reshape(np.dot(u, np.dot(s, vh)),
-                                             self.patch_shape, data.shape[2])
-        images_r = np.moveaxis(reconstruct_from_patches_2d(np.real(P)), -1, 0)
-        images_i = np.moveaxis(reconstruct_from_patches_2d(np.imag(P)), -1, 0)
-        return images_r + 1j * images_i
+        if data.shape[1:] == self.patch_shape:
+            images = self._prox_nuclear_norm(np.reshape(
+                np.moveaxis(data, 0, -1),
+                (np.prod(self.patch_shape), data.shape[0])))
+            return np.moveaxis(np.reshape(
+                    images,
+                    (*self.patch_shape,
+                     data.shape[0])), 0, -1)
+        elif self.overlapping_factor == 1:
+            P = extract_patches_2d(np.moveaxis(data, 0, -1),
+                                   self.patch_shape,
+                                   overlapping_factor=self.overlapping_factor)
+            number_of_patches = P.shape[0]
+            threshold = self.weights * extra_factor
+            num_cores = num_cores
+            if num_cores==1:
+                for idx in range(number_of_patches):
+                    P[idx, :, :, :] = self._prox_nuclear_norm(
+                        patch=P[idx, :, :, :,],
+                        threshold = threshold
+                        )
+            else:
+                print("Using joblib")
+                P = Parallel(n_jobs=num_cores)(delayed(self._prox_nuclear_norm)(
+                            patch=P[idx, : ,: ,:],
+                            threshold=threshold) for idx in range(number_of_patches))
+
+            output = reconstruct_non_overlapped_patches_2d(patches=P,
+                                                 img_size=data.shape[1:])
+            return output
+        else:
+            P = extract_patches_2d(np.moveaxis(data, 0, -1), self.patch_shape)
+            number_of_patches = P.shape[0]
+            threshold = self.weights * extra_factor
+            num_cores = 1  # int(multiprocessing.cpu_count()/2)
+            if num_cores==1:
+                for idx in range(number_of_patches):
+                    P[idx, :, :, :] = self._prox_nuclear_norm(
+                        patch=P[idx, :, :, :,],
+                        threshold = threshold
+                        )
+            else:
+                print("Using joblib")
+                P = Parallel(n_jobs=num_cores)(delayed(self._prox_nuclear_norm)(
+                            patch=P[idx, : ,: ,:],
+                            threshold=threshold) for idx in range(number_of_patches))
+
+            images_r = np.moveaxis(reconstruct_from_patches_2d(
+                np.real(P),
+                np.moveaxis(data, 0, -1).shape), 0, -1)
+            images_i = np.moveaxisaxes(reconstruct_from_patches_2d(
+                np.imag(P),
+                np.moveaxis(data, 0, -1).shape), 0, -1)
+            return images_r + 1j * images_i
 
     def get_cost(self, x):
         """Cost function
