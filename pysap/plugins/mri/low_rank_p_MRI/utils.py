@@ -21,6 +21,50 @@ import numpy as np
 from sklearn.feature_extraction.image import extract_patches
 from sklearn.feature_extraction.image import _compute_n_patches
 # from sklearn.feature_extraction.image import
+from skimage.measure import compare_ssim
+
+
+def mat2gray(image):
+    """Rescale the image between 0 and 1
+
+    Parameters:
+    ----------
+    image: np.ndarray
+        The image complex or not that has to be rescaled. If the image is
+        complex the returned image will be taken by the abs of the image
+    Returns:
+    -------
+    out: np.ndarray
+        The returned image
+    """
+    abs_image = np.abs(image)
+    return (abs_image - abs_image.min())/(abs_image.max() - abs_image.min())
+
+
+def compute_ssim(ref, image, mask=None):
+    """Compute the SSIM from the refernce on a rescaled image
+
+    Parameter:
+    ----------
+    ref: np.ndarray
+        The reference image
+    image: np.ndarray
+
+    mask: np.ndarray
+        A binary mask where the ssim should be calvulated
+    Output:
+    ------
+    ssim; np.float
+        SSIM value between 0 and 1
+    """
+    if mask is None:
+        return compare_ssim(mat2gray(ref), mat2gray(image))
+    else:
+        _, maps_ssim = compare_ssim(mat2gray(ref), mat2gray(image),
+                                            full=True)
+        maps_ssim = mask*maps_ssim
+        return maps_ssim.sum()/mask.sum()
+
 
 def prod_over_maps(S, X):
     """

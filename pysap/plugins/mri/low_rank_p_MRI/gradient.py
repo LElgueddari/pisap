@@ -42,7 +42,7 @@ class Grad2D_pMRI_analysis(GradBasic, PowerMethod):
         self.fourier_op = fourier_op
         GradBasic.__init__(self, data, self._analy_op_method,
                            self._analy_rsns_op_method)
-        PowerMethod.__init__(self, self.trans_op_op, data.shape,
+        PowerMethod.__init__(self, self.trans_op_op, (data.shape[0], *fourier_op.shape),
                              data_type="complex128", auto_run=False)
         self.get_spec_rad(extra_factor=1.1)
 
@@ -63,7 +63,7 @@ class Grad2D_pMRI_analysis(GradBasic, PowerMethod):
             the operation result (the recovered kspace).
         """
         data = []
-        [data.append(self.fourier_op.op(x[channel, :, :]))
+        [data.append(self.fourier_op.op(x[channel]))
             for channel in range(x.shape[0])]
         return np.asarray(data)
 
