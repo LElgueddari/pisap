@@ -37,7 +37,7 @@ import progressbar
 
 def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
                      max_nb_of_iter=300, atol=1e-4, verbose=0, get_cost=False,
-                     patches_shape=(10, 10)):
+                     patches_shape=(10, 10), overlaping_factor=1):
     """ The FISTA sparse reconstruction without reweightings.
 
     .. note:: At the moment, supports only 2D data.
@@ -94,7 +94,8 @@ def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
 
     # Define the proximity dual operator
     weights = mu
-    prox_op = NuclearNorm(weights, patches_shape)
+    prox_op = NuclearNorm(weights, patches_shape,
+                          overlapping_factor=overlaping_factor)
 
     # Define the optimizer
     cost_op = None

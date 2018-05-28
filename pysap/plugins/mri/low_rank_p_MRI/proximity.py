@@ -62,6 +62,12 @@ class NuclearNorm(object):
             (*self.patch_shape, patch.shape[-1]))
         return patch
 
+    def _nuclear_norm_cost(self, patch):
+        _, s, _ = np.linalg.svd(np.reshape(
+            patch,
+            (np.prod(self.patch_shape), patch.shape[-1])),
+            full_matrices=False)
+        return np.sum(np.abs(s.flatten()))
 
     def op(self, data, extra_factor=1.0, num_cores=1):
         """ Operator
@@ -112,31 +118,34 @@ class NuclearNorm(object):
                                                  img_size=data.shape[1:])
             return output
         else:
-            P = extract_patches_2d(np.moveaxis(data, 0, -1), self.patch_shape)
-            number_of_patches = P.shape[0]
-            threshold = self.weights * extra_factor
-            num_cores = 1  # int(multiprocessing.cpu_count()/2)
-            if num_cores==1:
-                for idx in range(number_of_patches):
-                    P[idx, :, :, :] = self._prox_nuclear_norm(
-                        patch=P[idx, :, :, :,],
-                        threshold = threshold
-                        )
-            else:
-                print("Using joblib")
-                P = Parallel(n_jobs=num_cores)(delayed(self._prox_nuclear_norm)(
-                            patch=P[idx, : ,: ,:],
-                            threshold=threshold) for idx in range(number_of_patches))
 
-            images_r = np.moveaxis(reconstruct_from_patches_2d(
-                np.real(P),
-                np.moveaxis(data, 0, -1).shape), 0, -1)
-            images_i = np.moveaxisaxes(reconstruct_from_patches_2d(
-                np.imag(P),
-                np.moveaxis(data, 0, -1).shape), 0, -1)
-            return images_r + 1j * images_i
+            raise('Nuclear norm with overlapped patches not implemented yet')
 
-    def get_cost(self, x):
+            # P = extract_patches_2d(np.moveaxis(data, 0, -1), self.patch_shape)
+            # number_of_patches = P.shape[0]
+            # threshold = self.weights * extra_factor
+            # num_cores = 1  # int(multiprocessing.cpu_count()/2)
+            # if num_cores==1:
+            #     for idx in range(number_of_patches):
+            #         P[idx, :, :, :] = self._prox_nuclear_norm(
+            #             patch=P[idx, :, :, :,],
+            #             threshold = threshold
+            #             )
+            # else:
+            #     print("Using joblib")
+            #     P = Parallel(n_jobs=num_cores)(delayed(self._prox_nuclear_norm)(
+            #                 patch=P[idx, : ,: ,:],
+            #                 threshold=threshold) for idx in range(number_of_patches))
+            #
+            # images_r = np.moveaxis(reconstruct_from_patches_2d(
+            #     np.real(P),
+            #     np.moveaxis(data, 0, -1).shape), 0, -1)
+            # images_i = np.moveaxisaxes(reconstruct_from_patches_2d(
+            #     np.imag(P),
+            #     np.moveaxis(data, 0, -1).shape), 0, -1)
+            # return images_r + 1j * images_i
+
+    def get_cost(self, data, extra_factor=1.0, num_cores=1):
         """Cost function
         This method calculate the cost function of the proximable part.
 
@@ -149,4 +158,57 @@ class NuclearNorm(object):
         -------
         The cost of this sparse code
         """
-        return 0.0
+        cost = 0
+        threshold = self.weights * extra_factor
+        if data.shape[1:] == self.patch_shape:
+            cost += self._nuclear_norm_cost(patch=np.reshape(
+                np.moveaxis(data, 0, -1),
+                (np.prod(self.patch_shape), data.shape[0])))
+            return cost * threshold
+        elif self.overlapping_factor == 1:
+            P = extract_patches_2d(np.moveaxis(data, 0, -1),
+                                   self.patch_shape,
+                                   overlapping_factor=self.overlapping_factor)
+            number_of_patches = P.shape[0]
+            num_cores = num_cores
+            if num_cores==1:
+                for idx in range(number_of_patches):
+                    cost += self._nuclear_norm_cost(
+                        patch=P[idx, :, :, :,]
+                        )
+            else:
+                print("Using joblib")
+                cost += Parallel(n_jobs=num_cores)(delayed(
+                    self._cost_nuclear_norm)(
+                        patch=P[idx, : ,: ,:]
+                        ) for idx in range(number_of_patches))
+
+            return cost
+        else:
+
+            raise('Nuclear norm with overlapped patches not implemented yet')
+
+
+            # P = extract_patches_2d(np.moveaxis(data, 0, -1), self.patch_shape)
+            # number_of_patches = P.shape[0]
+            # threshold = self.weights * extra_factor
+            # num_cores = 1  # int(multiprocessing.cpu_count()/2)
+            # if num_cores==1:
+            #     for idx in range(number_of_patches):
+            #         P[idx, :, :, :] = self._prox_nuclear_norm(
+            #             patch=P[idx, :, :, :,],
+            #             threshold = threshold
+            #             )
+            # else:
+            #     print("Using joblib")
+            #     P = Parallel(n_jobs=num_cores)(delayed(self._cost_nuclear_norm)(
+            #                 patch=P[idx, : ,: ,:],
+            #                 threshold=threshold) for idx in range(number_of_patches))
+            #
+            # images_r = np.moveaxis(reconstruct_from_patches_2d(
+            #     np.real(P),
+            #     np.moveaxis(data, 0, -1).shape), 0, -1)
+            # images_i = np.moveaxisaxes(reconstruct_from_patches_2d(
+            #     np.imag(P),
+            #     np.moveaxis(data, 0, -1).shape), 0, -1)
+            # return images_r + 1j * images_i
