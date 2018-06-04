@@ -18,6 +18,7 @@ This module contains all the utils tools needed in the p_MRI reconstruction.
 
 # Third party import
 import numpy as np
+from itertools import product
 from sklearn.feature_extraction.image import extract_patches
 from sklearn.feature_extraction.image import _compute_n_patches
 # from sklearn.feature_extraction.image import
@@ -153,10 +154,10 @@ def check_lipschitz_cst(f, x_shape, lipschitz_cst, max_nb_of_iter=10):
 
     return is_lips_cst
 
-def extract_patches_2d(image, patch_shape, overlapping_factor=0):
+def extract_patches_2d(image, patch_shape, overlapping_factor=1):
 
     i_h, i_w = image.shape[:2]
-    p_h, p_w = patch_shape
+    p_h, p_w = patch_shape[:2]
     patch_step_size = (int(p_h/overlapping_factor),
                        int(p_w/overlapping_factor),
                        image.shape[-1])
@@ -172,9 +173,6 @@ def extract_patches_2d(image, patch_shape, overlapping_factor=0):
     extracted_patches = extract_patches(image,
                                         patch_shape=(p_h, p_w, n_colors),
                                         extraction_step=patch_step_size)
-
-    n_patches = _compute_n_patches(i_h, i_w, p_h, p_w, None)
-
     patches = extracted_patches
 
     patches = patches.reshape(-1, p_h, p_w, n_colors)
@@ -196,3 +194,23 @@ def reconstruct_non_overlapped_patches_2d(patches, img_size):
             IMG[:, idx_x*patches_size[0]: (idx_x+1)*patches_size[0],
                 idx_y*patches_size[1]: (idx_y+1)*patches_size[1]] = patch_n
     return IMG
+
+def reconstruct_overlapped_patches_2d(patches, img_size, extraction_step_size):
+    i_h, i_w = img_size[:2]
+    p_h, p_w = patches.shape[1:3]
+    img = np.zeros(img_size).astype(patches.dtype)
+    # compute the dimensions of the patches array
+    n_h = i_h - p_h + 1
+    n_w = i_w - p_w + 1
+    ratio_h = p_h *1.0 / extraction_step_size[0]
+    ratio_w = p_w *1.0 / extraction_step_size[1]
+    stop_h = int((ratio_h - 1) * extraction_step_size[0])
+    stop_w = int((ratio_w - 1) * extraction_step_size[1])
+    vect_n_h = np.arange(0, i_h-stop_h, extraction_step_size[0])
+    vect_n_w = np.arange(0, i_w-stop_w, extraction_step_size[1])
+    weights = np.zeros(img_size)
+    for p, (i, j) in zip(patches, product(vect_n_h, vect_n_w)):
+        img[i:i + p_h, j:j + p_w] += p
+        weights[i:i + p_h, j:j + p_w] += 1
+    return img/weights
+
