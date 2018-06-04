@@ -14,16 +14,13 @@ FISTA or CONDAT-VU MRI reconstruction.
 
 # System import
 from __future__ import print_function
-import copy
 import time
 
 # Package import
-from pysap.base.utils import unflatten
 from pysap.utils import fista_logo
 from pysap.utils import condatvu_logo
 from pysap.numerics.cost import DualGapCost
 from pysap.numerics.reweight import mReweight
-from pysap.plugins.mri.low_rank_p_MRI.proximity import NuclearNorm
 
 # Third party import
 import numpy as np
@@ -35,9 +32,8 @@ from modopt.opt.reweight import cwbReweight
 import progressbar
 
 
-def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
-                     max_nb_of_iter=300, atol=1e-4, verbose=0, get_cost=False,
-                     patches_shape=(10, 10), overlaping_factor=1):
+def sparse_rec_fista(gradient_op, linear_op, prox_op, mu, lambda_init=1.0,
+                     max_nb_of_iter=300, atol=1e-4, verbose=0, get_cost=False):
     """ The FISTA sparse reconstruction without reweightings.
 
     .. note:: At the moment, supports only 2D data.
@@ -78,7 +74,10 @@ def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
 
     # Define the initial primal and dual solutions
     x_init = np.zeros((32, 512, 512), dtype=np.complex)  #TODO: Making more general
-    alpha = linear_op.op(x_init)
+    alpha = []
+    [alpha.append(linear_op.op(x_init[channel]))for channel in
+        range(x_init.shape[0])]
+    alpha = np.asarray(alpha)
     alpha[...] = 0.0
 
     # Welcome message
@@ -93,14 +92,11 @@ def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
         print("-" * 40)
 
     # Define the proximity dual operator
-    weights = mu
-    prox_op = NuclearNorm(weights, patches_shape,
-                          overlapping_factor=overlaping_factor)
 
     # Define the optimizer
     cost_op = None
     opt = ForwardBackward(
-        x=x_init,
+        x=np.zeros(alpha.shape, dtype=np.complex),
         grad=gradient_op,
         prox=prox_op,
         cost=cost_op,
@@ -139,7 +135,9 @@ def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
         print("Done.")
         print("Execution time: ", end - start, " seconds")
         print("-" * 40)
-    x_final = linear_op.adj_op(opt.x_final)
+    x_final = []
+    [x_final.append(linear_op.adj_op(opt.x_final[idx])) for idx in range(opt.x_final.shape[0])]
+    x_final = np.asarray(x_final)
 
     if get_cost:
         return x_final, cost
@@ -147,12 +145,11 @@ def sparse_rec_fista(gradient_op, linear_op, mu, lambda_init=1.0,
         return x_final
 
 
-def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
+def sparse_rec_condatvu(gradient_op, linear_op, prox_dual_op, std_est=None,
                         std_est_method=None, std_thr=2.,
                         mu=1e-6, tau=None, sigma=None, relaxation_factor=1.0,
                         nb_of_reweights=1, max_nb_of_iter=150,
-                        add_positivity=False, atol=1e-4, verbose=0,
-                        patches_shape=(16, 16)):
+                        add_positivity=False, atol=1e-4, verbose=0):
     """ The Condat-Vu sparse reconstruction with reweightings.
 
     .. note:: At the moment, supports only 2D data.
@@ -225,31 +222,33 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
 
     # Case1: estimate the noise std in the image domain
     if std_est_method == "primal":
+        raise('Not tested yet')
         if std_est is None:
             std_est = sigma_mad(gradient_op.MtX(gradient_op.y))
         weights[...] = std_thr * std_est
         reweight_op = cwbReweight(weights)
-        prox_dual_op = NuclearNorm(reweight_op.weights, patches_shape)
+        prox_dual_op.weights = reweight_op.weights
 
     # Case2: estimate the noise std in the sparse wavelet domain
     elif std_est_method == "dual":
+        raise('Not tested yet')
         if std_est is None:
             std_est = 0.0
         weights[...] = std_thr * std_est
         reweight_op = mReweight(weights, linear_op, thresh_factor=std_thr)
-        prox_dual_op = NuclearNorm(reweight_op.weights, patches_shape)
+        prox_dual_op.weights = reweight_op.weights
 
     # Case3: manual regularization mode, no reweighting
     else:
         weights = mu
         reweight_op = None
-        prox_dual_op = NuclearNorm(weights, patches_shape)
+        prox_dual_op.weights = weights
         nb_of_reweights = 0
 
     # Define the Condat Vu optimizer: define the tau and sigma in the
     # Condat-Vu proximal-dual splitting algorithm if not already provided.
     # Check also that the combination of values will lead to convergence.
-    norm = linear_op.l2norm((32, 512, 512))  # TODO make it more general
+    norm = linear_op.l2norm((512, 512))  # TODO make it more general
     lipschitz_cst = gradient_op.spec_rad
     if sigma is None:
         sigma = 0.5

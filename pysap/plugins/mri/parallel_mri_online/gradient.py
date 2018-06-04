@@ -114,8 +114,8 @@ class Grad2D_pMRI_synthesis(GradBasic, PowerMethod):
         GradBasic.__init__(self, data, self._synth_op_method,
                            self._synth_trans_op_method)
         coef = linear_op.op(np.zeros(fourier_op.shape).astype(np.complex))
-        self.linear_op_coeffs_shape = coef.shape
-        PowerMethod.__init__(self, self.trans_op_op, coef.shape,
+        self.linear_op_coeffs_shape = (data.shape[0], *coef.shape)
+        PowerMethod.__init__(self, self.trans_op_op, self.linear_op_coeffs_shape,
                              data_type="complex128", auto_run=False)
         self.get_spec_rad(extra_factor=1.1)
 
@@ -156,11 +156,9 @@ class Grad2D_pMRI_synthesis(GradBasic, PowerMethod):
         result: np.ndarray
             the operation result.
         """
-
-        rsl = np.zeros(self.linear_op.coeffs_shape).astype('complex128')
         rsl = []
         [rsl.append(self.linear_op.op(self.fourier_op.adj_op(x[channel])))
-            for channel in range(x.data[0])]
+            for channel in range(x.shape[0])]
         return np.asarray(rsl)
 
 

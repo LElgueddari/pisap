@@ -186,29 +186,61 @@ class NuclearNorm(object):
             return cost
         else:
 
-            raise('Nuclear norm with overlapped patches not implemented yet')
 
+class GroupLasso(object):
+    """The proximity of the group-lasso regularisation
 
-            # P = extract_patches_2d(np.moveaxis(data, 0, -1), self.patch_shape)
-            # number_of_patches = P.shape[0]
-            # threshold = self.weights * extra_factor
-            # num_cores = 1  # int(multiprocessing.cpu_count()/2)
-            # if num_cores==1:
-            #     for idx in range(number_of_patches):
-            #         P[idx, :, :, :] = self._prox_nuclear_norm(
-            #             patch=P[idx, :, :, :,],
-            #             threshold = threshold
-            #             )
-            # else:
-            #     print("Using joblib")
-            #     P = Parallel(n_jobs=num_cores)(delayed(self._cost_nuclear_norm)(
-            #                 patch=P[idx, : ,: ,:],
-            #                 threshold=threshold) for idx in range(number_of_patches))
-            #
-            # images_r = np.moveaxis(reconstruct_from_patches_2d(
-            #     np.real(P),
-            #     np.moveaxis(data, 0, -1).shape), 0, -1)
-            # images_i = np.moveaxisaxes(reconstruct_from_patches_2d(
-            #     np.imag(P),
-            #     np.moveaxis(data, 0, -1).shape), 0, -1)
-            # return images_r + 1j * images_i
+    This class defines the group-lasso penalization
+
+    Parameters
+    ----------
+    weights : np.ndarray
+        Input array of weights
+    """
+    def __init__(self, weights):
+        """
+        Parameters:
+        -----------
+        """
+        self.weights = weights
+
+    def op(self, data, extra_factor=1.0):
+        """ Operator
+
+        This method returns the input data thresholded by the weights
+
+        Parameters
+        ----------
+        data : DictionaryBase
+            Input data array
+        extra_factor : float
+            Additional multiplication factor
+
+        Returns
+        -------
+        DictionaryBase thresholded data
+
+        """
+        threshold = self.weights * extra_factor
+        norm_2 = np.linalg.norm(data, axis=0)
+
+        np.maximum((1.0 - threshold /
+                         np.maximum(np.finfo(np.float64).eps, np.abs(data))),
+                         0.0) * data
+        return data * np.maximum(0, 1.0 - self.weights*extra_factor /
+                                 np.maximum(norm_2, np.finfo(np.float32).eps))
+
+    def get_cost(self, data):
+        """Cost function
+        This method calculate the cost function of the proximable part.
+
+        Parameters
+        ----------
+        x: np.ndarray
+            Input array of the sparse code.
+
+        Returns
+        -------
+        The cost of this sparse code
+        """
+        return np.sum(np.linalg.norm(data, axis=0))
