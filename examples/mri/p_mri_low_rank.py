@@ -18,13 +18,14 @@ We also add some gaussian noise in the image space.
 # Package import
 import pysap
 from pysap.data import get_sample_data
-from pysap.plugins.mri.reconstruct.reconstruct import NFFT2
 from pysap.plugins.mri.reconstruct.reconstruct import FFT2
-from pysap.plugins.mri.low_rank_p_MRI.linear import Identity
-from pysap.plugins.mri.low_rank_p_MRI.reconstruct import sparse_rec_fista
-from pysap.plugins.mri.low_rank_p_MRI.reconstruct import sparse_rec_condatvu
+from pysap.plugins.mri.reconstruct.reconstruct import NFFT2
+from pysap.plugins.mri.parallel_mri_online.linear import Identity
+from pysap.plugins.mri.parallel_mri_online.gradient import Grad2D_pMRI
+from pysap.plugins.mri.parallel_mri_online.proximity import NuclearNorm
 from pysap.plugins.mri.reconstruct.utils import convert_mask_to_locations
-from pysap.plugins.mri.low_rank_p_MRI.gradient import Grad2D_pMRI
+from pysap.plugins.mri.parallel_mri_online.reconstruct import sparse_rec_fista
+from pysap.plugins.mri.parallel_mri_online.reconstruct import sparse_rec_condatvu
 
 # Third party import
 import numpy as np
@@ -36,12 +37,12 @@ image_name = '/volatile/data/2017-05-30_32ch/'\
             '/meas_MID41_CSGRE_ref_OS1_FID14687.mat'
 k_space_ref = loadmat(image_name)['ref']
 k_space_ref /= np.linalg.norm(k_space_ref)
-cartesian_reconstrustion = True
+cartesian_reconstruction = False
 
 if cartesian_reconstruction:
     Sl = np.zeros((32, 512, 512), dtype='complex128')
     for channel in range(k_space_ref.shape[-1]):
-        Sl[channel] = np.fft.fftshift(np.ifft2(np.reshape(
+        Sl[channel] = np.fft.fftshift(np.fft.ifft2(np.reshape(
             k_space_ref[:, channel], (512, 512))))
     SOS = np.sqrt(np.sum(np.abs(Sl)**2, 0))
 else:
@@ -70,7 +71,7 @@ if cartesian_reconstruction:
     mask.data = np.fft.fftshift(mask.data)
     kspace_loc = convert_mask_to_locations(mask.data)
     kspace_data = []
-    [kspace.append(mask.data * np.fft2(Sl[channel])
+    [kspace_data.append(mask.data * np.fft.fft2(Sl[channel]))
         for channel in range(Sl.shape[0])]
 else:
     kspace_loc = convert_mask_to_locations(mask.data)
@@ -96,7 +97,7 @@ max_iter = 10
 linear_op = Identity()
 
 if cartesian_reconstruction:
-    fourier_op = FFT2(samples=kspace_loc, shape(512,512))
+    fourier_op = FFT2(samples=kspace_loc, shape=(512,512))
 else:
     fourier_op = NFFT2(samples=kspace_loc, shape=(512, 512))
 
@@ -104,17 +105,22 @@ else:
 gradient_op_cd = Grad2D_pMRI(data=kspace_data,
                              fourier_op=fourier_op)
 
-mu_value = 1e-7
+mu_value = 0  # 1e-7
+patch_shape = (64, 64, 32)
+overlapping_factor = 4
+prox_op = NuclearNorm(weights=mu_value,
+                      patch_shape=patch_shape,
+                      overlapping_factor=overlapping_factor)
 x_final, cost = sparse_rec_fista(
     gradient_op=gradient_op_cd,
     linear_op=linear_op,
+    prox_op=prox_op,
     mu=mu_value,
     lambda_init=1.0,
     max_nb_of_iter=max_iter,
     atol=1e-4,
     verbose=1,
-    get_cost=True,
-    patches_shape=(512, 512))
+    get_cost=True)
 
 image_rec = pysap.Image(data=np.sqrt(np.sum(np.abs(x_final)**2, axis=0)))
 image_rec.show()
