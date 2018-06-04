@@ -21,6 +21,7 @@ from pysap.utils import fista_logo
 from pysap.utils import condatvu_logo
 from pysap.numerics.cost import DualGapCost
 from pysap.numerics.reweight import mReweight
+# from pysap.plugins.mri.low_rank_p_MRI.proximity import NuclearNorm
 
 # Third party import
 import numpy as np
@@ -237,12 +238,14 @@ def sparse_rec_condatvu(gradient_op, linear_op, prox_dual_op, std_est=None,
         weights[...] = std_thr * std_est
         reweight_op = mReweight(weights, linear_op, thresh_factor=std_thr)
         prox_dual_op.weights = reweight_op.weights
+        # prox_dual_op = NuclearNorm(reweight_op.weights, patches_shape)
 
     # Case3: manual regularization mode, no reweighting
     else:
         weights = mu
         reweight_op = None
         prox_dual_op.weights = weights
+        # prox_dual_op = NuclearNorm(weights, patches_shape)
         nb_of_reweights = 0
 
     # Define the Condat Vu optimizer: define the tau and sigma in the

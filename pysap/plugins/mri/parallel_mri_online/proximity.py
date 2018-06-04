@@ -19,7 +19,9 @@ from pysap.plugins.mri.parallel_mri_online.utils import \
 from pysap.plugins.mri.parallel_mri_online.utils import \
                                     reconstruct_overlapped_patches_2d
 from joblib import Parallel, delayed
-import multiprocessing
+from pysap.plugins.mri.parallel_mri_online.utils import \
+                                    _oscar_weights
+from sklearn.isotonic import isotonic_regression
 
 
 class NuclearNorm(object):
@@ -257,3 +259,105 @@ class GroupLasso(object):
         The cost of this sparse code
         """
         return np.sum(np.linalg.norm(data, axis=0))
+
+
+class OWL(object):
+    """The proximity of the OWL regularisation
+
+    This class defines the OWL penalization
+
+    Parameters
+    ----------
+    weights : np.ndarray
+        Input array of weights
+    """
+    def __init__(self, alpha, beta=None, data_shape=None, mode='all',
+                 n_channel=1):
+        """
+        Parameters:
+        -----------
+        """
+        self.weights = alpha
+        self.mode = mode
+        if beta is not None:
+            print("Uses OSCAR: Octogonal Shrinkage and Clustering Algorithm for"
+                   "Regression")
+            if data_shape is None:
+                raise('Data size must be specified if OSCAR is used')
+            else:
+                if self.mode is 'all':
+                    self.weights = _oscar_weights(alpha, beta,
+                                                  data_shape * n_channel)
+                elif self.mode is 'band_based':
+                    self.band_shape = data_shape
+                    self.weights = []
+                    for band_shape in data_shape:
+                        self.weights.append(_oscar_weights(
+                            alpha, beta, n_channel * np.prod(band_shape)))
+                elif self.mode is 'coeff_based':
+                    self.weights = _oscar_weights(alpha, beta, n_channel)
+                else:
+                    raise('Unknow mode')
+
+    def _prox_owl(self, data, threshold):
+        data_abs = np.abs(data)
+        ix = np.argsort(data_abs)[::-1]
+        data_abs = data_abs[ix]  # Sorted absolute value of the data
+
+        # Project on the monotone non-negative deacresing cone
+        data_abs = isotonic_regression(data_abs - threshold, y_min=0,
+                                       increasing=False)
+        # Undo the sorting
+        inv_x = np.zeros_like(ix)
+        inv_x[ix] = np.arange(len(data))
+        data_abs = data_abs[inv_x]
+
+        sign_data = data/np.abs(data)
+
+        return sign_data * data_abs
+
+    def op(self, data, extra_factor=1.0):
+        """
+        Define the proximity operator of the OWL norm
+        """
+        if self.mode is 'all':
+            threshold = self.weights * extra_factor
+            output = self._prox_owl(data.flatten(), threshold)
+        elif self.mode is 'band_based':
+            output = np.zeros_like(data)
+            start = 0
+            n_channel = data.shape[0]
+            for band_shape_idx, weights in zip(self.band_shape, self.weights):
+                n_coeffs = np.prod(band_shape_idx)
+                stop = start + n_coeffs
+                print('Start ', start, 'Stop ', stop)
+                print(weights.shape)
+                reshaped_data = np.reshape(
+                    data[:, start: stop], (n_channel*n_coeffs))
+                output[:, start: stop] = np.reshape(self._prox_owl(
+                    reshaped_data,
+                    weights * extra_factor), (n_channel, n_coeffs))
+                start = stop
+        elif self.mode is 'coeff_based':
+            threshold = self.weights * extra_factor
+            output = np.zeros_like(data)
+            for idx in range(data.shape[1]):
+                output[:, idx] = self._prox_owl(np.squeeze(data[:, idx]),
+                                                threshold)
+        return output
+
+    def get_cost(self, data):
+        """Cost function
+        This method calculate the cost function of the proximable part.
+
+        Parameters
+        ----------
+        x: np.ndarray
+            Input array of the sparse code.
+
+        Returns
+        -------
+        The cost of this sparse code
+        """
+        warnings.warn('Cost function not implemented yet', UserWarning)
+        return 0

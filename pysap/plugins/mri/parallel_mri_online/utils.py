@@ -214,3 +214,8 @@ def reconstruct_overlapped_patches_2d(patches, img_size, extraction_step_size):
         weights[i:i + p_h, j:j + p_w] += 1
     return img/weights
 
+def _oscar_weights(alpha, beta, size):
+    w = np.arange(size-1, -1, -1, dtype = np.double)
+    w *= beta
+    w += alpha
+    return w
