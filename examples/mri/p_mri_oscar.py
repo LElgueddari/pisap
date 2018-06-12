@@ -97,6 +97,7 @@ max_iter = 10
 linear_op = Wavelet2(wavelet_name="UndecimatedBiOrthogonalTransform",
                      nb_scale=4)
 
+alpha_0 = linear_op.op(np.zeros((512,512)))
 
 if cartesian_reconstruction:
     fourier_op = FFT2(samples=kspace_loc, shape=(512,512))
@@ -107,9 +108,14 @@ gradient_op_cd = Grad2D_pMRI(data=kspace_data,
                              fourier_op=fourier_op,
                              linear_op=linear_op)
 
-mu_value = 1e-6
-beta = 1e-7
-prox_op = OWL(mu_value, beta, 32)
+mu_value = 1e-5
+beta = 1e-15
+prox_op = OWL(mu_value,
+              beta,
+              data_shape=linear_op.coeffs_shape,
+              mode='band_based',
+              n_channel=32)
+
 x_final, cost = sparse_rec_fista(
     gradient_op=gradient_op_cd,
     linear_op=linear_op,
