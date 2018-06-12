@@ -13,11 +13,13 @@ Overload the proximity class from modopt.
 
 import numpy as np
 import warnings
+from modopt.opt.proximity import SparseThreshold
 from pysap.plugins.mri.parallel_mri_online.utils import extract_patches_2d
 from pysap.plugins.mri.parallel_mri_online.utils import \
                                     reconstruct_non_overlapped_patches_2d
 from pysap.plugins.mri.parallel_mri_online.utils import \
                                     reconstruct_overlapped_patches_2d
+from pysap.plugins.mri.parallel_mri_online.linear import Identity
 from joblib import Parallel, delayed
 from pysap.plugins.mri.parallel_mri_online.utils import \
                                     _oscar_weights
@@ -261,6 +263,66 @@ class GroupLasso(object):
         return np.sum(np.linalg.norm(data, axis=0))
 
 
+class SparseGroupLasso(SparseThreshold, GroupLasso):
+    """The proximity of the sparse group-lasso regularisation
+
+    This class defines the sparse group-lasso penalization
+
+    Parameters
+    ----------
+    weights : np.ndarray
+        Input array of weights
+    """
+    def __init__(self, weights_l1, weights_l2, linear_op=Identity):
+        """
+        Parameters:
+        -----------
+        """
+        self.prox_op_l1 = SparseThreshold(linear=linear_op,
+                                          weights=weights_l1,
+                                          thresh_type='soft')
+        self.prox_op_l2 = GroupLasso(weights=weights_l2)
+        self.weights_l1 = weights_l1
+        self.weights_l2 = weights_l2
+
+    def op(self, data, extra_factor=1.0):
+        """ Operator
+
+        This method returns the input data thresholded by the weights
+
+        Parameters
+        ----------
+        data : DictionaryBase
+            Input data array
+        extra_factor : float
+            Additional multiplication factor
+
+        Returns
+        -------
+        DictionaryBase thresholded data
+
+        """
+
+        return self.prox_op_l2.op(self.prox_op_l1.op(data,
+                                                     extra_factor=extra_factor),
+                                  extra_factor=extra_factor)
+
+    def get_cost(self, data):
+        """Cost function
+        This method calculate the cost function of the proximable part.
+
+        Parameters
+        ----------
+        x: np.ndarray
+            Input array of the sparse code.
+
+        Returns
+        -------
+        The cost of this sparse code
+        """
+        return self.prox_op_l1.cost(data) + self.prox_op_l2.cost(data)
+
+
 class OWL(object):
     """The proximity of the OWL regularisation
 
@@ -330,8 +392,6 @@ class OWL(object):
             for band_shape_idx, weights in zip(self.band_shape, self.weights):
                 n_coeffs = np.prod(band_shape_idx)
                 stop = start + n_coeffs
-                print('Start ', start, 'Stop ', stop)
-                print(weights.shape)
                 reshaped_data = np.reshape(
                     data[:, start: stop], (n_channel*n_coeffs))
                 output[:, start: stop] = np.reshape(self._prox_owl(
