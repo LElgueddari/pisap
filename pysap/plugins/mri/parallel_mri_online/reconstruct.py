@@ -74,7 +74,7 @@ def sparse_rec_fista(gradient_op, linear_op, prox_op, mu, lambda_init=1.0,
     start = time.clock()
 
     # Define the initial primal and dual solutions
-    x_init = np.zeros((32, 512, 512), dtype=np.complex)  #TODO: Making more general
+    x_init = np.zeros((gradient_op.obs_data.shape[0], *gradient_op.fourier_op.shape), dtype=np.complex)  #TODO: Making more general
     alpha = []
     [alpha.append(linear_op.op(x_init[channel]))for channel in
         range(x_init.shape[0])]
@@ -264,8 +264,9 @@ def sparse_rec_condatvu(gradient_op, linear_op, prox_dual_op, std_est=None,
         1.0 / tau - sigma * norm ** 2 >= lipschitz_cst / 2.0)
 
     # Define initial primal and dual solutions
-    primal = np.zeros((32, 512, 512), dtype=np.complex)
-    dual = linear_op.op(primal)
+    primal = np.zeros((gradient_op.obs_data.shape[0], *gradient_op.fourier_op.shape), dtype=np.complex)
+    dual = prox_dual_op.op(primal)
+    # dual = linear_op.op(primal)
     dual = np.asarray(dual)
 
     print('HERRRREE ------>', dual.shape)  # TODO to be removed

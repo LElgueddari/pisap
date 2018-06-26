@@ -44,6 +44,8 @@ class Wavelet2(object):
         self.transform = transform_klass(
             nb_scale=self.nb_scale, verbose=verbose)
         self.coeffs_shape = None
+        self.flatten = flatten
+        self.unflatten = unflatten
 
     def op(self, data):
         """ Define the wavelet operator.
@@ -64,7 +66,7 @@ class Wavelet2(object):
             data = pysap.Image(data=data)
         self.transform.data = data
         self.transform.analysis()
-        coeffs, self.coeffs_shape = flatten(self.transform.analysis_data)
+        coeffs, self.coeffs_shape = self.flatten(self.transform.analysis_data)
         return coeffs
 
     def adj_op(self, coeffs, dtype="array"):
@@ -85,7 +87,7 @@ class Wavelet2(object):
         data: ndarray
             the reconstructed data.
         """
-        self.transform.analysis_data = unflatten(coeffs, self.coeffs_shape)
+        self.transform.analysis_data = self.unflatten(coeffs, self.coeffs_shape)
         image = self.transform.synthesis()
         if dtype == "array":
             return image.data
