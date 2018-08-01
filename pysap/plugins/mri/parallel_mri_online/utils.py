@@ -23,6 +23,7 @@ from sklearn.feature_extraction.image import extract_patches
 from sklearn.feature_extraction.image import _compute_n_patches
 # from sklearn.feature_extraction.image import
 from skimage.measure import compare_ssim
+import warnings
 
 
 def mat2gray(image):
@@ -94,30 +95,6 @@ def prod_over_maps(S, X):
     return Sl
 
 
-def function_over_maps(f, x):
-    """
-    This methods computes the callable function over the third direction
-
-    Parameters
-    ----------
-    f: callable
-        This function will be applyed n times where n is the last element in
-        the shape of x
-    x: np.ndarray
-        Input data
-
-    Returns
-    -------
-    out: np.list
-        the results of the function as a list where the length of the list is
-        equal to n
-    """
-    yl = []
-    for i in range(x.T.shape[0]):
-        yl.append(f((x.T[i]).T))
-    return np.stack(yl, axis=len(yl[0].shape))
-
-
 def check_lipschitz_cst(f, x_shape, lipschitz_cst, max_nb_of_iter=10):
     """
     This methods check that for random entrees the lipschitz constraint are
@@ -178,7 +155,7 @@ def extract_patches_2d(image, patch_shape, overlapping_factor=1):
     patches = patches.reshape(-1, p_h, p_w, n_colors)
     # remove the color dimension if useless
     if patches.shape[-1] == 1:
-        return patches.reshape((n_patches, p_h, p_w))
+        return np.squeeze(patches)
     else:
         return patches
 
@@ -219,3 +196,204 @@ def _oscar_weights(alpha, beta, size):
     w *= beta
     w += alpha
     return w
+
+def compress_data(kspace, nb_of_channel_to_keep):
+    if nb_of_channel_to_keep < kspace.shape[0]:
+        U, s, V = np.linalg.svd(kspace, full_matrices=False)
+        matrix_compression = np.dot(S[:, :nb_of_channel_to_keep],
+                                    np.diag[:nb_of_channel_to_keep])
+        return np.dot(kspace.T, matrix_compression).T
+    else:
+        warnings.warn("The data doesn't need to be compressed")
+        return kspace
+
+def flatten_swt2(x):
+    """ Flatten list an array.
+
+    Parameters
+    ----------
+    x: list of dict or ndarray
+        the input data
+
+    Returns
+    -------
+    y: ndarray 1D
+        the flatten input list of array.
+    shape: list of dict
+        the input list of array structure.
+    """
+    # Check input
+    if not isinstance(x, list):
+        x = [x]
+    elif len(x) == 0:
+        return None, None
+
+    # Flatten the dataset
+    y = []
+    shape_dict = []
+    for i in range(len(x)):
+        dict_lvl = {}
+        for key in x[i].keys():
+            dict_lvl[key] = x[i][key].shape
+            y = np.concatenate((y, x[i][key].flatten()))
+        shape_dict.append(dict_lvl)
+
+    return y, shape_dict
+
+
+def unflatten_swt2(y, shape):
+    """ Unflatten a flattened array.
+
+    Parameters
+    ----------
+    y: ndarray 1D
+        a flattened input array.
+    shape: list of dict
+        the output structure information.
+
+    Returns
+    -------
+    x: list of ndarray
+        the unflattened dataset.
+    """
+    # Unflatten the dataset
+    x = []
+    offset = 0
+    for i in range(len(shape)):
+        sublevel = {}
+        for key in shape[i].keys():
+            start = offset
+            stop = offset + np.prod(shape[i][key])
+            offset = stop
+            sublevel[key] = y[start: stop].reshape(shape[i][key])
+        x.append(sublevel)
+    return x
+
+
+def flatten_wave2(x):
+    """ Flatten list an array.
+
+    Parameters
+    ----------
+    x: list of dict or ndarray
+        the input data
+
+    Returns
+    -------
+    y: ndarray 1D
+        the flatten input list of array.
+    shape: list of dict
+        the input list of array structure.
+    """
+
+    # Flatten the dataset
+    if not isinstance(x, list):
+        x = [x]
+    elif len(x) == 0:
+        return None, None
+
+    # Flatten the dataset
+    y = x[0].flatten()
+    shape_dict = [x[0].shape]
+    for x_i in x[1:]:
+        shape_coeffs = []
+        for cn in x_i:
+            y = np.concatenate((y, cn.flatten()))
+            shape_coeffs.append(cn.shape)
+        shape_dict.append(shape_coeffs)
+
+    return y, shape_dict
+
+
+def unflatten_wave2(y, shape):
+    """ Unflatten a flattened array.
+
+    Parameters
+    ----------
+    y: ndarray 1D
+        a flattened input array.
+    shape: list of dict
+        the output structure information.
+
+    Returns
+    -------
+    x: list of ndarray
+        the unflattened dataset.
+    """
+    # Unflatten the dataset
+    start = 0
+    stop = np.prod(shape[0])
+    x = [y[start:stop].reshape(shape[0])]
+    offset = stop
+    for shape_i in shape[1:]:
+        sublevel = []
+        for value in shape_i:
+            start = offset
+            stop = offset + np.prod(value)
+            offset = stop
+            sublevel.append(y[start: stop].reshape(value))
+        x.append(sublevel)
+    return x
+
+
+def flatten_dwt2(x):
+    """ Flatten list an array.
+
+    Parameters
+    ----------
+    x: list of dict or ndarray
+        the input data
+
+    Returns
+    -------
+    y: ndarray 1D
+        the flatten input list of array.
+    shape: list of dict
+        the input list of array structure.
+    """
+
+    # Flatten the dataset
+    if not isinstance(x, tuple):
+        x = [x]
+    elif len(x) == 0:
+        return None, None
+
+    # Flatten the dataset
+    y = x[0].flatten()
+    shape_dict = [x[0].shape]
+    (cHn, cVn, cDn) = x[1]
+    y = np.concatenate((y, cHn.flatten()))
+    y = np.concatenate((y, cVn.flatten()))
+    y = np.concatenate((y, cDn.flatten()))
+    shape_dict.append((cHn.shape, cVn.shape, cDn.shape))
+
+    return y, shape_dict
+
+def unflatten_dwt2(y, shape):
+    """ Unflatten a flattened array.
+
+    Parameters
+    ----------
+    y: ndarray 1D
+        a flattened input array.
+    shape: list of dict
+        the output structure information.
+
+    Returns
+    -------
+    x: list of ndarray
+        the unflattened dataset.
+    """
+    # Unflatten the dataset
+    start = 0
+    stop = np.prod(shape[0])
+    x = [y[start:stop].reshape(shape[0])]
+    offset = stop
+    sublevel = []
+    for shape_i in shape[1]:
+        start = offset
+        stop = offset + np.prod(shape_i)
+        offset = stop
+        sublevel.append(y[start: stop].reshape(shape_i))
+    x.append(tuple(sublevel))
+    return tuple(x)
