@@ -24,6 +24,7 @@ from pysap.utils import condatvu_logo
 from pysap.numerics.cost import DualGapCost
 from pysap.numerics.reweight import mReweight
 from pysap.numerics.proximity import Threshold
+from pysap.plugins.mri.parallel_mri.utils import compute_ssim
 
 # Third party import
 import numpy as np
@@ -145,7 +146,8 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
                         std_est_method=None, std_thr=2.,
                         mu=1e-6, tau=None, sigma=None, relaxation_factor=1.0,
                         nb_of_reweights=1, max_nb_of_iter=150,
-                        add_positivity=False, atol=1e-4, verbose=0):
+                        add_positivity=False, atol=1e-4, verbose=0,
+                        primal=None, dual=None, I_ref=None, mask=None):
     """ The Condat-Vu sparse reconstruction with reweightings.
 
     .. note:: At the moment, supports only 2D data.
@@ -255,9 +257,11 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
         1.0 / tau - sigma * norm ** 2 >= lipschitz_cst / 2.0)
 
     # Define initial primal and dual solutions
-    primal = np.zeros(gradient_op.fourier_op.shape, dtype=np.complex)
-    dual = linear_op.op(primal)
-    dual[...] = 0.0
+    if primal is None:
+        primal = np.zeros(gradient_op.fourier_op.shape, dtype=np.complex)
+    if dual is None:
+        dual = linear_op.op(primal)
+    # dual[...] = 0.0
 
     # Welcome message
     if verbose > 0:
@@ -312,10 +316,16 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
     # Perform the first reconstruction
     if verbose > 0:
         print("Starting optimization...")
-
+    time_it = np.zeros((max_nb_of_iter, 1))
+    ssim_value = np.zeros((max_nb_of_iter, 1))
+    cost_it = np.zeros((max_nb_of_iter+1, 1))
+    cost_it[0] = 0.5* gradient_op.get_cost(primal) + mu * np.sum(np.abs(linear_op.op(primal)))
     for i in range(max_nb_of_iter):
+            start_it_time = time.clock()
             opt._update()
-
+            time_it[i] = time.clock() - start_it_time
+            cost_it[i+1] = 0.5* gradient_op.get_cost(opt._x_new) + mu * np.sum(np.abs(linear_op.op(opt._x_new)))
+            ssim_value[i] = compute_ssim(opt._x_new, I_ref, mask)
     opt.x_final = opt._x_new
     opt.y_final = opt._y_new
 
@@ -354,4 +364,4 @@ def sparse_rec_condatvu(gradient_op, linear_op, std_est=None,
     linear_op.transform.analysis_data = unflatten(
         opt.y_final, linear_op.coeffs_shape)
 
-    return x_final, linear_op.transform
+    return x_final, linear_op.transform, time_it, ssim_value, cost_it
