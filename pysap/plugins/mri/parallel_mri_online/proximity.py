@@ -495,12 +495,12 @@ class MultiLevelNuclearNorm(NuclearNorm):
         prox_coeffs = []
         ## Reshape wavelet coeffs per scale
         coeffs = self.linear_op.unflatten(wavelet_coeffs[0],
-                                          self.linear_op.coeffs_shape)
+                                          self.linear_op.coeffs_shape[0])
         coeffs = [[band] for band in coeffs]
         for channel in range(wavelet_coeffs.shape[0]-1):
             coeffs_per_channel = self.linear_op.unflatten(
-                wavelet_coeffs[channel],
-                self.linear_op.coeffs_shape
+                wavelet_coeffs[channel+1],
+                self.linear_op.coeffs_shape[channel+1]
                 )
             for coeff, coeff_per_channel in zip(coeffs, coeffs_per_channel):
                     coeff.append(coeff_per_channel)
@@ -538,12 +538,12 @@ class MultiLevelNuclearNorm(NuclearNorm):
         cost = 0
 
         coeffs = self.linear_op.unflatten(wavelet_coeffs[0],
-                                          self.linear_op.coeffs_shape)
+                                          self.linear_op.coeffs_shape[0])
         coeffs = [[band] for band in coeffs]
         for channel in range(wavelet_coeffs.shape[0]-1):
             coeffs_per_channel = self.linear_op.unflatten(
-                wavelet_coeffs[channel],
-                self.linear_op.coeffs_shape
+                wavelet_coeffs[channel+1],
+                self.linear_op.coeffs_shape[channel+1]
                 )
             for coeff, coeff_per_channel in zip(coeffs, coeffs_per_channel):
                     coeff.append(coeff_per_channel)
