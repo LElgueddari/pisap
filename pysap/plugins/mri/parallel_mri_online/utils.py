@@ -230,15 +230,20 @@ def flatten_swt2(x):
 
     # Flatten the dataset
     y = []
-    shape_dict = []
-    for i in range(len(x)):
-        dict_lvl = {}
-        for key in x[i].keys():
-            dict_lvl[key] = x[i][key].shape
-            y = np.concatenate((y, x[i][key].flatten()))
-        shape_dict.append(dict_lvl)
+    coeffs_shape = []
+    for cA, cD in x:
+        level_shape = []
+        y = np.concatenate((y, cA.flatten()))
+        level_shape.append(cA.shape)
+        shape_details = []
+        for cD_ in cD:
+            y = np.concatenate((y, cD_.flatten()))
+            shape_details.append(cD_.shape)
+        level_shape.append(shape_details)
+        coeffs_shape.append(level_shape)
 
-    return y, shape_dict
+
+    return np.asarray(y), coeffs_shape
 
 
 def unflatten_swt2(y, shape):
@@ -259,14 +264,17 @@ def unflatten_swt2(y, shape):
     # Unflatten the dataset
     x = []
     offset = 0
-    for i in range(len(shape)):
-        sublevel = {}
-        for key in shape[i].keys():
-            start = offset
-            stop = offset + np.prod(shape[i][key])
-            offset = stop
-            sublevel[key] = y[start: stop].reshape(shape[i][key])
-        x.append(sublevel)
+    for cA_shape, cD_shape in shape:
+        level = []
+        cA = np.reshape(y[offset: offset + np.prod(cA_shape)], cA_shape)
+        offset += np.prod(cA_shape)
+        level.append(cA)
+        cD = []
+        for cD_ in cD_shape:
+            cD.append(np.reshape(y[offset: offset + np.prod(cD_)], cD_))
+            offset += np.prod(cA_shape)
+        level.append(cD)
+        x.append(tuple(level))
     return x
 
 
