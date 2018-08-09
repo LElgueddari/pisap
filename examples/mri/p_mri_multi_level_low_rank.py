@@ -51,7 +51,6 @@ else:
     Sl = np.zeros((32, 512, 512), dtype='complex128')
     for channel in range(k_space_ref.shape[-1]):
         Sl[channel] = gen_image_op.adj_op(np.reshape(k_space_ref[:, channel], (512, 512)))
-    Sl = Sl[:2]
     SOS = np.sqrt(np.sum(np.abs(Sl)**2, 0))
 
 mask = get_sample_data("mri-mask")
@@ -74,15 +73,19 @@ if cartesian_reconstruction:
     kspace_data = []
     [kspace_data.append(mask.data * np.fft.fft2(Sl[channel]))
         for channel in range(Sl.shape[0])]
+    kspace_data = np.asarray(kspace_data)
 else:
     kspace_loc = convert_mask_to_locations(mask.data)
     fourier_op_1 = NFFT2(samples=kspace_loc, shape=image.shape)
     kspace_data = []
     for channel in range(Sl.shape[0]):
         kspace_data.append(fourier_op_1.op(Sl[channel]))
+    kspace_data = np.asarray(kspace_data)
+    # Coil compression step
+    # U, s, V = np.linalg.svd(kspace_data.T, full_matrices=False)
+    # kspace_data = np.dot(U[:,:16], np.dot(np.diag(s[:16]), V[:16, :]))
 
-kspace_data = np.asarray(kspace_data)
-print(kspace_data.shape)
+
 #############################################################################
 # FISTA optimization
 # ------------------
@@ -91,13 +94,13 @@ print(kspace_data.shape)
 # Here no cost function is set, and the optimization will reach the
 # maximum number of iterations. Fill free to play with this parameter.
 
-# Start the FISTA reconstruction
-# import ipdb; ipdb.set_trace()
 max_iter = 10
+# Start the FISTA reconstruction
 
-linear_op = Wavelet2('UndecimatedBiOrthogonalTransform', nb_scale=4)
+linear_op = Wavelet2('UndecimatedBiOrthogonalTransform', nb_scale=4,
+                     multichannel=True)
 
-_ = linear_op.op(np.zeros(SOS.shape))
+_ = linear_op.op(np.zeros(Sl.shape))
 
 if cartesian_reconstruction:
     fourier_op = FFT2(samples=kspace_loc, shape=(512,512))
@@ -109,7 +112,7 @@ gradient_op_cd = Grad2D_pMRI(data=kspace_data,
                              linear_op=linear_op,
                              fourier_op=fourier_op)
 
-mu_value = 1e-7
+mu_value = 1e-5
 gamma = 0.5
 weights = []
 patch_shape = []
@@ -118,39 +121,44 @@ for scale_nb in range(linear_op.nb_scale):
         weights.append(mu_value * gamma**(linear_op.nb_scale-scale_nb-1))
         patch_shape.append((2**(6 - scale_nb), 2**(6 - scale_nb), Sl.shape[0]))
 
-overlapping_factor = 2
+        print("(Weights per scale, Patches shapes per scale)",
+              (weights[-1], patch_shape[-1]))
 
+
+overlapping_factor = 2
 
 prox_op = MultiLevelNuclearNorm(weights=weights,
                                 patch_shape=patch_shape,
                                 linear_op=linear_op,
                                 overlapping_factor=overlapping_factor)
 
-# x_final, cost = sparse_rec_fista(
-#     gradient_op=gradient_op_cd,
-#     linear_op=linear_op,
-#     prox_op=prox_op,
-#     mu=mu_value,
-#     lambda_init=1.0,
-#     max_nb_of_iter=max_iter,
-#     atol=1e-4,
-#     verbose=1,
-#     get_cost=True)
-#
-# image_rec = pysap.Image(data=np.sqrt(np.sum(np.abs(x_final)**2, axis=0)))
-# image_rec.show()
-# plt.plot(cost)
-# plt.show()
+x_final, cost = sparse_rec_fista(
+    gradient_op=gradient_op_cd,
+    linear_op=linear_op,
+    prox_op=prox_op,
+    mu=mu_value,
+    lambda_init=1.0,
+    max_nb_of_iter=max_iter,
+    atol=1e-4,
+    verbose=1,
+    get_cost=True)
+
+image_rec = pysap.Image(data=np.sqrt(np.sum(np.abs(x_final)**2, axis=0)))
+image_rec.show()
+plt.plot(cost)
+plt.show()
 
 gradient_op_cd = Grad2D_pMRI(data=kspace_data,
                              fourier_op=fourier_op)
 
-x_final, y_final = sparse_rec_condatvu(
+linear_op = Wavelet2('UndecimatedBiOrthogonalTransform', nb_scale=4,
+                      multichannel=True)
+
+x_final, y_final, cost_func = sparse_rec_condatvu(
      gradient_op=gradient_op_cd,
      linear_op=linear_op,
      prox_dual_op=prox_op,
      std_est=None,
-     mu=mu_value,
      tau=None,
      sigma=None,
      relaxation_factor=1.0,
@@ -158,10 +166,16 @@ x_final, y_final = sparse_rec_condatvu(
      max_nb_of_iter=max_iter,
      add_positivity=False,
      atol=1e-4,
-     verbose=1)
+     verbose=1,
+     get_cost=True)
 
-image_rec_y = pysap.Image(data=np.sqrt(np.sum(np.abs(y_final)**2, axis=0)))
+image_rec_y = pysap.Image(data=np.sqrt(np.sum(np.abs(linear_op.adj_op(
+                y_final))**2, axis=0)))
 image_rec_y.show()
 
 image_rec = pysap.Image(data=np.sqrt(np.sum(np.abs(x_final)**2, axis=0)))
 image_rec.show()
+
+
+plt.plot(cost_func)
+plt.show()
