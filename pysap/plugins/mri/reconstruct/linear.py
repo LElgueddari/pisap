@@ -24,7 +24,7 @@ import numpy
 class Wavelet2(object):
     """ The 2D wavelet transform class.
     """
-    def __init__(self, wavelet_name, nb_scale=4, verbose=0):
+    def __init__(self, wavelet_name, nb_scale=4, verbose=0, multichannel=False):
         """ Initialize the 'Wavelet2' class.
 
         Parameters
@@ -37,6 +37,7 @@ class Wavelet2(object):
             the verbosity level.
         """
         self.nb_scale = nb_scale
+        self.multichannel = multichannel
         if wavelet_name not in pysap.AVAILABLE_TRANSFORMS:
             raise ValueError(
                 "Unknown transformation '{0}'.".format(wavelet_name))
@@ -64,10 +65,21 @@ class Wavelet2(object):
         """
         if isinstance(data, numpy.ndarray):
             data = pysap.Image(data=data)
-        self.transform.data = data
-        self.transform.analysis()
-        coeffs, self.coeffs_shape = self.flatten(self.transform.analysis_data)
-        return coeffs
+        if self.multichannel:
+            coeffs = []
+            self.coeffs_shape = []
+            for channel in range(data.shape[0]):
+                self.transform.data = data[channel]
+                self.transform.analysis()
+                coeff, coeffs_shape = self.flatten(self.transform.analysis_data)
+                coeffs.append(coeff)
+                self.coeffs_shape.append(coeffs_shape)
+            return numpy.asarray(coeffs)
+        else:
+            self.transform.data = data
+            self.transform.analysis()
+            coeffs, self.coeffs_shape = self.flatten(self.transform.analysis_data)
+            return coeffs
 
     def adj_op(self, coeffs, dtype="array"):
         """ Define the wavelet adjoint operator.
@@ -87,11 +99,20 @@ class Wavelet2(object):
         data: ndarray
             the reconstructed data.
         """
-        self.transform.analysis_data = self.unflatten(coeffs, self.coeffs_shape)
-        image = self.transform.synthesis()
-        if dtype == "array":
-            return image.data
-        return image
+        if self.multichannel:
+            images = []
+            for channel, coeffs_shape in zip(range(coeffs.shape[0]),
+                                                   self.coeffs_shape):
+                self.transform.analysis_data = self.unflatten(coeffs[channel],
+                                                              coeffs_shape)
+                images.append(self.transform.synthesis().data)
+            return numpy.asarray(images)
+        else:
+            self.transform.analysis_data = self.unflatten(coeffs, self.coeffs_shape)
+            image = self.transform.synthesis()
+            if dtype == "array":
+                return image.data
+            return image
 
     def l2norm(self, shape):
         """ Compute the L2 norm.

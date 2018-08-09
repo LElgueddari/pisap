@@ -113,8 +113,9 @@ class Grad2D_pMRI_synthesis(GradBasic, PowerMethod):
         self.linear_op = linear_op
         GradBasic.__init__(self, data, self._synth_op_method,
                            self._synth_trans_op_method)
-        coef = linear_op.op(np.zeros(fourier_op.shape).astype(np.complex))
-        self.linear_op_coeffs_shape = (data.shape[0], *coef.shape)
+        coef = linear_op.op(np.zeros((data.shape[0],
+                                      *fourier_op.shape)).astype(np.complex))
+        self.linear_op_coeffs_shape = coef.shape
         PowerMethod.__init__(self, self.trans_op_op, self.linear_op_coeffs_shape,
                              data_type="complex128", auto_run=False)
         self.get_spec_rad(extra_factor=1.1)
@@ -136,7 +137,8 @@ class Grad2D_pMRI_synthesis(GradBasic, PowerMethod):
             the operation result (the recovered kspace).
         """
         rsl = []
-        [rsl.append(self.fourier_op.op(self.linear_op.adj_op(x[channel])))
+        images = self.linear_op.adj_op(x)
+        [rsl.append(self.fourier_op.op(images[channel]))
             for channel in range(x.shape[0])]
         return np.asarray(rsl)
 
@@ -156,10 +158,10 @@ class Grad2D_pMRI_synthesis(GradBasic, PowerMethod):
         result: np.ndarray
             the operation result.
         """
-        rsl = []
-        [rsl.append(self.linear_op.op(self.fourier_op.adj_op(x[channel])))
-            for channel in range(x.shape[0])]
-        return np.asarray(rsl)
+        images = np.asarray([self.fourier_op.adj_op(x[channel])
+                  for channel in range(x.shape[0])])
+        rslt = self.linear_op.op(images)
+        return np.asarray(rslt)
 
 
 class Grad2D_pMRI(Grad2D_pMRI_analysis, Grad2D_pMRI_synthesis):

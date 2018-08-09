@@ -15,6 +15,7 @@ FISTA or CONDAT-VU MRI reconstruction.
 # System import
 from __future__ import print_function
 import time
+import timeit
 
 # Package import
 from pysap.utils import fista_logo
@@ -34,7 +35,8 @@ import progressbar
 
 
 def sparse_rec_fista(gradient_op, linear_op, prox_op, mu, lambda_init=1.0,
-                     max_nb_of_iter=300, atol=1e-4, verbose=0, get_cost=False):
+                     max_nb_of_iter=300, atol=1e-4, verbose=0, get_cost=False,
+                     I_ref=None, real_gradient=None, mask=None):
     """ The FISTA sparse reconstruction without reweightings.
 
     .. note:: At the moment, supports only 2D data.
@@ -74,11 +76,9 @@ def sparse_rec_fista(gradient_op, linear_op, prox_op, mu, lambda_init=1.0,
     start = time.clock()
 
     # Define the initial primal and dual solutions
-    x_init = np.zeros((gradient_op.obs_data.shape[0], *gradient_op.fourier_op.shape), dtype=np.complex)  #TODO: Making more general
-    alpha = []
-    [alpha.append(linear_op.op(x_init[channel]))for channel in
-        range(x_init.shape[0])]
-    alpha = np.asarray(alpha)
+    x_init = np.zeros((gradient_op.obs_data.shape[0],
+                       *gradient_op.fourier_op.shape), dtype=np.complex)  #TODO: Making more general
+    alpha = linear_op.op(x_init)
     alpha[...] = 0.0
 
     # Welcome message
@@ -112,45 +112,88 @@ def sparse_rec_fista(gradient_op, linear_op, prox_op, mu, lambda_init=1.0,
     if get_cost:
         cost = np.zeros(max_nb_of_iter)
 
-    with progressbar.ProgressBar(redirect_stdout=True,
-                                 max_value=max_nb_of_iter) as bar:
-        for idx in range(max_nb_of_iter):
-            opt._update()
-            bar.update(idx)
-            if get_cost:
-                cost[idx] = gradient_op.get_cost(opt._x_new) + \
-                          prox_op.get_cost(opt._x_new)
-            if opt.converge:
-                print(' - Converged!')
+    if I_ref is None and real_gradient is None:
+
+        with progressbar.ProgressBar(redirect_stdout=True,
+                                     max_value=max_nb_of_iter) as bar:
+            for idx in range(max_nb_of_iter):
+                opt._update()
+                bar.update(idx)
                 if get_cost:
-                    cost = cost[0:idx]
-                break
+                    cost[idx] = gradient_op.get_cost(opt._x_new) + \
+                              prox_op.get_cost(opt._x_new)
+                if opt.converge:
+                    print(' - Converged!')
+                    if get_cost:
+                        cost = cost[0:idx]
+                    break
 
-    opt.x_final = opt._x_new
-    end = time.clock()
-    if verbose > 0:
-        # cost_op.plot_cost()
-        # print(" - final iteration number: ", cost_op._iteration)
-        # print(" - final log10 cost value: ", np.log10(cost_op.cost))
-        print(" - converged: ", opt.converge)
-        print("Done.")
-        print("Execution time: ", end - start, " seconds")
-        print("-" * 40)
-    x_final = []
-    [x_final.append(linear_op.adj_op(opt.x_final[idx])) for idx in range(opt.x_final.shape[0])]
-    x_final = np.asarray(x_final)
+        opt.x_final = opt._x_new
+        end = time.clock()
+        if verbose > 0:
+            # cost_op.plot_cost()
+            # print(" - final iteration number: ", cost_op._iteration)
+            # print(" - final log10 cost value: ", np.log10(cost_op.cost))
+            print(" - converged: ", opt.converge)
+            print("Done.")
+            print("Execution time: ", end - start, " seconds")
+            print("-" * 40)
 
-    if get_cost:
-        return x_final, cost
+        x_final = linear_op.adj_op(opt.x_final)
+        if get_cost:
+            return x_final, cost
+        else:
+            return x_final
     else:
-        return x_final
+        from .utils import compute_ssim
+        ssim_values = np.zeros((max_nb_of_iter, 1))
+        time_iterations = np.zeros((max_nb_of_iter, 1))
+        with progressbar.ProgressBar(redirect_stdout=True,
+                                     max_value=max_nb_of_iter) as bar:
+            for idx in range(max_nb_of_iter):
+                start_it = timeit.default_timer()
+                opt._update()
+                time_iterations[idx] = timeit.default_timer() - start_it
+                print('Time -----> ', time_iterations[idx])
+                bar.update(idx)
+                rec = linear_op.adj_op(opt._x_new)
+                rec = np.sqrt(np.sum(np.abs(rec) ** 2, axis=0))
+                ssim_values[idx] = compute_ssim(rec,
+                                                I_ref, mask)
+                if get_cost:
+                    cost[idx] = real_gradient.get_cost(opt._x_new) + \
+                              prox_op.get_cost(opt._x_new)
+                if opt.converge:
+                    print(' - Converged!')
+                    if get_cost:
+                        cost = cost[0:idx]
+                    break
+
+        opt.x_final = opt._x_new
+        end = time.clock()
+        if verbose > 0:
+            # cost_op.plot_cost()
+            # print(" - final iteration number: ", cost_op._iteration)
+            # print(" - final log10 cost value: ", np.log10(cost_op.cost))
+            print(" - converged: ", opt.converge)
+            print("Done.")
+            print("Execution time: ", end - start, " seconds")
+            print("-" * 40)
+
+        x_final = linear_op.adj_op(opt.x_final)
+        if get_cost:
+            return x_final, time_iterations, ssim_values, cost
+        else:
+            return x_final, time_iterations, ssim_values
+
 
 
 def sparse_rec_condatvu(gradient_op, linear_op, prox_dual_op, std_est=None,
-                        std_est_method=None, std_thr=2.,
-                        mu=1e-6, tau=None, sigma=None, relaxation_factor=1.0,
+                        mu=1.0, std_est_method=None, std_thr=2.,
+                        tau=None, sigma=None, relaxation_factor=1.0,
                         nb_of_reweights=1, max_nb_of_iter=150,
-                        add_positivity=False, atol=1e-4, verbose=0):
+                        add_positivity=False, atol=1e-4, verbose=0,
+                        get_cost=False, primal=None, dual=None):
     """ The Condat-Vu sparse reconstruction with reweightings.
 
     .. note:: At the moment, supports only 2D data.
@@ -195,6 +238,8 @@ def sparse_rec_condatvu(gradient_op, linear_op, prox_dual_op, std_est=None,
         tolerance threshold for convergence.
     verbose: int, default 0
         the verbosity level.
+    primal  Initial guess
+    dual initial guess
 
     Returns
     -------
@@ -242,16 +287,22 @@ def sparse_rec_condatvu(gradient_op, linear_op, prox_dual_op, std_est=None,
 
     # Case3: manual regularization mode, no reweighting
     else:
-        weights = mu
         reweight_op = None
-        prox_dual_op.weights = weights
         # prox_dual_op = NuclearNorm(weights, patches_shape)
         nb_of_reweights = 0
+
+    # Define initial primal and dual solutions
+    if primal is None:
+        primal = np.zeros((gradient_op.obs_data.shape[0],
+                           *gradient_op.fourier_op.shape), dtype=np.complex)
+    if dual is None:
+        dual = linear_op.op(primal)
+        dual = np.asarray(dual)
 
     # Define the Condat Vu optimizer: define the tau and sigma in the
     # Condat-Vu proximal-dual splitting algorithm if not already provided.
     # Check also that the combination of values will lead to convergence.
-    norm = linear_op.l2norm((512, 512))  # TODO make it more general
+    norm = linear_op.l2norm(primal.shape)
     lipschitz_cst = gradient_op.spec_rad
     if sigma is None:
         sigma = 0.5
@@ -263,13 +314,6 @@ def sparse_rec_condatvu(gradient_op, linear_op, prox_dual_op, std_est=None,
     convergence_test = (
         1.0 / tau - sigma * norm ** 2 >= lipschitz_cst / 2.0)
 
-    # Define initial primal and dual solutions
-    primal = np.zeros((gradient_op.obs_data.shape[0], *gradient_op.fourier_op.shape), dtype=np.complex)
-    dual = prox_dual_op.op(primal)
-    # dual = linear_op.op(primal)
-    dual = np.asarray(dual)
-
-    print('HERRRREE ------>', dual.shape)  # TODO to be removed
     dual[...] = 0.0
 
     # Welcome message
@@ -323,6 +367,23 @@ def sparse_rec_condatvu(gradient_op, linear_op, prox_dual_op, std_est=None,
         auto_iterate=False)
 
     # Perform the first reconstruction
+    if get_cost:
+        cost = np.zeros(max_nb_of_iter)
+
+        if verbose > 0:
+            print("Starting optimization...")
+        with progressbar.ProgressBar(redirect_stdout=True,
+                                     max_value=max_nb_of_iter) as bar:
+            for idx in range(max_nb_of_iter):
+                    opt._update()
+                    bar.update(idx)
+                    cost[idx] = gradient_op.get_cost(opt._x_new) + \
+                                prox_dual_op.get_cost(linear_op.op(opt._x_new))
+
+        opt.x_final = opt._x_new
+        opt.y_final = opt._y_new
+        return opt.x_final, opt.y_final, cost
+
     if verbose > 0:
         print("Starting optimization...")
     with progressbar.ProgressBar(redirect_stdout=True,
