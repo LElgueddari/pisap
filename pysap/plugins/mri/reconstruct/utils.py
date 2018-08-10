@@ -59,3 +59,21 @@ def convert_locations_to_mask(samples_locations, img_shape):
     mask = np.zeros(img_shape)
     mask[samples_locations[:, 0], samples_locations[:, 1]] = 1
     return mask
+
+def reshape_coeff_channel(wavelet_coeffs, linear_op):
+    coeffs = linear_op.unflatten(wavelet_coeffs[0],
+                                 linear_op.coeffs_shape[0])
+    coeffs = [[band] for band in coeffs]
+    for channel in range(wavelet_coeffs.shape[0]-1):
+        coeffs_per_channel = linear_op.unflatten(
+            wavelet_coeffs[channel+1],
+            linear_op.coeffs_shape[channel+1]
+            )
+        for coeff, coeff_per_channel in zip(coeffs, coeffs_per_channel):
+                coeff.append(coeff_per_channel)
+
+    return [np.asarray(coeff) for coeff in coeffs]
+
+
+def reshape_channel_coeff(wavelet_coeff, linear_op):
+    return wavelet_coeff
