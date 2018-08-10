@@ -20,7 +20,7 @@ import pysap
 from pysap.data import get_sample_data
 from pysap.plugins.mri.reconstruct.reconstruct import FFT2
 from pysap.plugins.mri.reconstruct.reconstruct import NFFT2
-from pysap.plugins.mri.reconstruct.linear import Wavelet2
+from pysap.plugins.mri.parallel_mri_online.linear import Pywavelet2
 from pysap.plugins.mri.parallel_mri_online.gradient import Grad2D_pMRI
 from pysap.plugins.mri.reconstruct.utils import convert_mask_to_locations
 from pysap.plugins.mri.parallel_mri_online.reconstruct import sparse_rec_fista
@@ -97,8 +97,9 @@ else:
 max_iter = 10
 # Start the FISTA reconstruction
 
-linear_op = Wavelet2('UndecimatedBiOrthogonalTransform', nb_scale=4,
-                     multichannel=True)
+linear_op = Pywavelet2('haar', nb_scale=1,
+                        undecimated=False,
+                        multichannel=True)
 
 _ = linear_op.op(np.zeros(Sl.shape))
 
@@ -116,14 +117,16 @@ mu_value = 1e-5
 gamma = 0.5
 weights = []
 patch_shape = []
+nb_band_scale = 4
 for scale_nb in range(linear_op.nb_scale):
-    for _ in range(linear_op.transform.nb_band_per_scale[scale_nb]):
+    for _ in range(nb_band_scale):
         weights.append(mu_value * gamma**(linear_op.nb_scale-scale_nb-1))
         patch_shape.append((2**(6 - scale_nb), 2**(6 - scale_nb), Sl.shape[0]))
 
         print("(Weights per scale, Patches shapes per scale)",
               (weights[-1], patch_shape[-1]))
 
+print(patch_shape)
 
 overlapping_factor = 2
 
@@ -151,8 +154,8 @@ plt.show()
 gradient_op_cd = Grad2D_pMRI(data=kspace_data,
                              fourier_op=fourier_op)
 
-linear_op = Wavelet2('UndecimatedBiOrthogonalTransform', nb_scale=4,
-                      multichannel=True)
+linear_op = Pywavelet2('haar', nb_scale=1,
+                        multichannel=True)
 
 x_final, y_final, cost_func = sparse_rec_condatvu(
      gradient_op=gradient_op_cd,
