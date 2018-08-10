@@ -494,18 +494,9 @@ class MultiLevelNuclearNorm(NuclearNorm):
         """
         prox_coeffs = []
         ## Reshape wavelet coeffs per scale
-        coeffs = self.linear_op.unflatten(wavelet_coeffs[0],
-                                          self.linear_op.coeffs_shape[0])
-        coeffs = [[band] for band in coeffs]
-        for channel in range(wavelet_coeffs.shape[0]-1):
-            coeffs_per_channel = self.linear_op.unflatten(
-                wavelet_coeffs[channel+1],
-                self.linear_op.coeffs_shape[channel+1]
-                )
-            for coeff, coeff_per_channel in zip(coeffs, coeffs_per_channel):
-                    coeff.append(coeff_per_channel)
-
-        coeffs = [np.asarray(coeff) for coeff in coeffs]
+        print("Line 497", wavelet_coeffs.shape)
+        coeffs = self.linear_op.reshape_coeff_channel(wavelet_coeffs,
+                                                      self.linear_op)
 
         for coeffs_per_band, weights, patch_shape in zip(coeffs,
                                                          self._weights,
@@ -515,11 +506,12 @@ class MultiLevelNuclearNorm(NuclearNorm):
             prox_coeffs.append(super().op(data=coeffs_per_band,
                                           extra_factor=extra_factor,
                                           num_cores=num_cores))
+        prox_coeffs = self.linear_op.reshape_channel_coeff(prox_coeffs,
+                                                           self.linear_op)
         rslt = []
-        for channel in range(prox_coeffs[0].shape[0]):
-            coeffs_per_channel = [coeff_per_band[channel] for coeff_per_band in prox_coeffs]
-            coeffs_f, _ = self.linear_op.flatten(coeffs_per_channel)
-            rslt.append(coeffs_f)
+        for coeff in prox_coeffs:
+            coeff_flt, _ = self.linear_op.flatten(coeff)
+            rslt.append(coeff_flt)
         return np.asarray(rslt)
 
     def get_cost(self, wavelet_coeffs, extra_factor=1.0, num_cores=1):
@@ -536,19 +528,9 @@ class MultiLevelNuclearNorm(NuclearNorm):
         The cost of this sparse code
         """
         cost = 0
+        coeffs = self.linear_op.reshape_coeff_channel(wavelet_coeffs,
+                                                      self.linear_op)
 
-        coeffs = self.linear_op.unflatten(wavelet_coeffs[0],
-                                          self.linear_op.coeffs_shape[0])
-        coeffs = [[band] for band in coeffs]
-        for channel in range(wavelet_coeffs.shape[0]-1):
-            coeffs_per_channel = self.linear_op.unflatten(
-                wavelet_coeffs[channel+1],
-                self.linear_op.coeffs_shape[channel+1]
-                )
-            for coeff, coeff_per_channel in zip(coeffs, coeffs_per_channel):
-                    coeff.append(coeff_per_channel)
-
-        coeffs = [np.asarray(coeff) for coeff in coeffs]
         for coeff, weights, patch_shape in zip(coeffs,
                                                 self._weights,
                                                 self._patch_shape):

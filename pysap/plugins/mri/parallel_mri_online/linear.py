@@ -17,6 +17,8 @@ import pysap
 import pywt
 from .utils import unflatten_wave2, unflatten_swt2, unflatten_dwt2
 from .utils import flatten_swt2, flatten_wave2, flatten_dwt2
+from .utils import reshape_dwt2_coeff_channel
+from .utils import reshape_dwt2_channel_coeff
 
 # Third party import
 import numpy
@@ -73,7 +75,8 @@ class Identity(object):
 
 class Pywavelet2(object):
 
-    def __init__(self, wavelet_name, nb_scale=4, verbose=0, undecimated=False):
+    def __init__(self, wavelet_name, nb_scale=4, verbose=0, undecimated=False,
+                 multichannel=False):
         """ Initialize the 'pyWavelet3' class.
             print(x_new.shape)
         Parameters
@@ -92,12 +95,16 @@ class Pywavelet2(object):
                 "Unknown transformation '{0}'.".format(wavelet_name))
         self.pywt_transform = pywt.Wavelet(wavelet_name)
         self.single_level=False
+        self.multichannel = multichannel
+        self.nb_scale = nb_scale
         if nb_scale == 1 and not undecimated:
             self.single_level = True
             self.unflatten = unflatten_dwt2
             self.flatten = flatten_dwt2
+            self.reshape_coeff_channel = reshape_dwt2_coeff_channel
+            self.reshape_channel_coeff = reshape_dwt2_channel_coeff
         else:
-            self.nb_scale = nb_scale-1
+            self.single_level = False
             self.undecimated = undecimated
             self.unflatten = unflatten_swt2 if undecimated else unflatten_wave2
             self.flatten = flatten_swt2 if undecimated else flatten_wave2
@@ -131,17 +138,46 @@ class Pywavelet2(object):
         if isinstance(data, numpy.ndarray):
             data = pysap.Image(data=data)
 
-        if self.single_level:
-            coeffs_dict = pywt.dwt2(data, self.pywt_transform)
-        else:
-            if self.undecimated:
-                coeffs_dict = pywt.swt2(data, self.pywt_transform,
-                                        level=self.nb_scale)
+        if self.multichannel:
+            self.coeffs = []
+            self.coeffs_shape = []
+            if self.single_level:
+                for channel in range(data.shape[0]):
+                    coeffs_dict = pywt.dwt2(data[channel], self.pywt_transform)
+                    coeffs, coeffs_shape = self.flatten(coeffs_dict)
+                    self.coeffs.append(coeffs)
+                    self.coeffs_shape.append(coeffs_shape)
             else:
-                coeffs_dict = pywt.wavedec2(data,
+                if self.undecimated:
+                    for channel in range(data.shape[0]):
+                        coeffs_dict = pywt.swt2(data[channel],
+                                                self.pywt_transform,
+                                                level=self.nb_scale)
+                        coeffs, coeffs_shape = self.flatten(coeffs_dict)
+                        self.coeffs.append(coeffs)
+                        self.coeffs_shape.append(coeffs_shape)
+                else:
+                    for channel in range(data.shape[0]):
+                        coeffs_dict = pywt.wavedec2(data[channel],
+                                                    self.pywt_transform,
+                                                    level=self.nb_scale)
+                        coeffs, coeffs_shape = self.flatten(coeffs_dict)
+                        self.coeffs.append(coeffs)
+                        self.coeffs_shape.append(coeffs_shape)
+            self.coeffs = numpy.asarray(self.coeffs)
+        else:
+            if self.single_level:
+                coeffs_dict = pywt.dwt2(data, self.pywt_transform)
+            else:
+                if self.undecimated:
+                    coeffs_dict = pywt.swt2(data,
                                             self.pywt_transform,
                                             level=self.nb_scale)
-        self.coeffs, self.coeffs_shape = self.flatten(coeffs_dict)
+                else:
+                    coeffs_dict = pywt.wavedec2(data,
+                                                self.pywt_transform,
+                                                level=self.nb_scale)
+            self.coeffs, self.coeffs_shape = self.flatten(coeffs_dict)
         return self.coeffs
 
     def adj_op(self, coeffs, dtype="array"):
@@ -160,22 +196,42 @@ class Pywavelet2(object):
             the reconstructed data.
         """
         self.coeffs = coeffs
-        if self.single_level:
-            coeffs_dict = self.unflatten(coeffs, self.coeffs_shape)
-            data = pywt.idwt2(coeffs_dict, self.pywt_transform)
-        else:
-            if self.undecimated:
-                coeffs_dict = self.unflatten(coeffs, self.coeffs_shape)
-                data = pywt.iswt2(coeffs_dict,
-                                  self.pywt_transform)
+        if self.multichannel:
+            data = []
+            if self.single_level:
+                for channel in range(coeffs.shape[0]):
+                    coeffs_dict = self.unflatten(coeffs[channel], self.coeffs_shape[channel])
+                    data.append(pywt.idwt2(coeffs_dict, self.pywt_transform))
             else:
+                if self.undecimated:
+                    for channel in range(coeffs.shape[0]):
+                        coeffs_dict = self.unflatten(coeffs[channel], self.coeffs_shape[channel])
+                        data.append(pywt.iswt2(coeffs_dict,
+                                          self.pywt_transform))
+                else:
+                    for channel in range(coeffs.shape[0]):
+                        coeffs_dict = self.unflatten(coeffs[channel], self.coeffs_shape[channel])
+                        data.append(pywt.waverec2(
+                            coeffs=coeffs_dict,
+                            wavelet=self.pywt_transform))
+            return numpy.asarray(data)
+        else:
+            if self.single_level:
                 coeffs_dict = self.unflatten(coeffs, self.coeffs_shape)
-                data = pywt.waverec2(
-                    coeffs=coeffs_dict,
-                    wavelet=self.pywt_transform)
-        if dtype == "array":
-            return data
-        return pysap.Image(data=data)
+                data = pywt.idwt2(coeffs_dict, self.pywt_transform)
+            else:
+                if self.undecimated:
+                    coeffs_dict = self.unflatten(coeffs, self.coeffs_shape)
+                    data = pywt.iswt2(coeffs_dict,
+                                      self.pywt_transform)
+                else:
+                    coeffs_dict = self.unflatten(coeffs, self.coeffs_shape)
+                    data = pywt.waverec2(
+                        coeffs=coeffs_dict,
+                        wavelet=self.pywt_transform)
+            if dtype == "array":
+                return data
+            return pysap.Image(data=data)
 
     def l2norm(self, shape):
         """ Compute the L2 norm.

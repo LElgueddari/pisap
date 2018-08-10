@@ -405,3 +405,58 @@ def unflatten_dwt2(y, shape):
         sublevel.append(y[start: stop].reshape(shape_i))
     x.append(tuple(sublevel))
     return tuple(x)
+
+def reshape_dwt2_coeff_channel(wavelet_coeff, linear_op):
+    """ Reshape the list of wavelet coeffiscients of length (channel number)
+    on a list of wavelet coeffiscient of length (number of band) where each
+    band is the concatenation of all the channel
+    Parameters:
+    ----------
+    wavelet_coeff: np.ndarray
+        The flattened wavelet coeffiscient
+    linear_op: instance of PyWavelet2 or Wavelet2
+        The linear op used to generate the wavelet coeffiscients
+    Return:
+        list of all the band
+    ------
+    """
+    wavelet_coeff_unflattened = [linear_op.unflatten(
+        wavelet_coeff[ch],
+        linear_op.coeffs_shape[ch]) for ch in range(wavelet_coeff.shape[0])]
+    coeffs_cA = []
+    coeffs_cDh = []
+    coeffs_cDv = []
+    coeffs_cDd = []
+
+    for cA_per_channel, cD_per_channel in wavelet_coeff_unflattened:
+        coeffs_cA.append(cA_per_channel)
+        cDh, cDv, cDd = cD_per_channel
+        coeffs_cDh.append(cDh)
+        coeffs_cDv.append(cDv)
+        coeffs_cDd.append(cDd)
+    return [np.asarray(coeffs_cA), np.asarray(coeffs_cDh),
+            np.asarray(coeffs_cDv), np.asarray(coeffs_cDd)]
+
+def reshape_dwt2_channel_coeff(wavelet_coeff, linear_op):
+    """ Reshape a list of band wavevelet coeffiscient into same shape as the
+    wavelet coefficsient given by the pywt.dwt2
+     Parameters:
+     ----------
+     wavelet_coeff: np.ndarray
+         The flattened wavelet coeffiscient
+     linear_op: instance of PyWavelet2 or Wavelet2
+         The linear op used to generate the wavelet coeffiscients
+     Return:
+         list of all the wavelet coeffiscient per channel
+    """
+    channel_nb = wavelet_coeff[0].shape[0]
+    coeffs = []
+    cA_all = wavelet_coeff[0]
+    cDh_all = wavelet_coeff[1]
+    cDv_all = wavelet_coeff[2]
+    cDd_all = wavelet_coeff[3]
+    for ch in range(channel_nb):
+        cA = cA_all[ch]
+        cD = tuple([cDh_all[ch], cDv_all[ch], cDd_all[ch]])
+        coeffs.append((cA, cD))
+    return coeffs
