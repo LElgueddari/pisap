@@ -313,6 +313,7 @@ class OWL(object):
         data_abs = data_abs[inv_x]
 
         sign_data = data/np.abs(data)
+        sign_data[np.isnan(sign_data)] = 0
 
         return sign_data * data_abs
 
