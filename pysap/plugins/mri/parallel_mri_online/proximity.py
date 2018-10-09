@@ -355,7 +355,7 @@ class OWL(object):
             output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
                         data=np.squeeze(data[:, idx]),
                         threshold=threshold) for idx in range(data.shape[1]))
-        return output
+        return np.asarray(output).T
 
     def get_cost(self, data):
         """Cost function
