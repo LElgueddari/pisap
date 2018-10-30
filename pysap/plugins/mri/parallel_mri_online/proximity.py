@@ -339,9 +339,10 @@ class OWL(object):
         elif self.mode is 'band_based':
             data_r = self._reshape_mode_based(data)
             output = []
-            output = Parallel(n_jobs=self.num_cores, verbose=1)(delayed(self._prox_owl)(
+            output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
                         data=data_band,
-                        threshold=weights * extra_factor) for data_band, weights in zip(data_r, self.weights))
+                        threshold=weights * extra_factor)
+                        for data_band, weights in zip(data_r, self.weights))
             reshaped_data = np.zeros(data.shape, dtype=data.dtype)
             start = 0
             n_channel = data.shape[0]
@@ -349,7 +350,7 @@ class OWL(object):
                 stop = start + np.prod(band_shape_idx)
                 reshaped_data[:, start : stop] = np.reshape(band_data, (n_channel, np.prod(band_shape_idx)))
                 start = stop
-            output = reshaped_data
+            output = np.asarray(reshaped_data).T
         elif self.mode is 'coeff_based':
             threshold = self.weights * extra_factor
             output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
