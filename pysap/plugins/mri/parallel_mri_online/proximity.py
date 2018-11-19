@@ -540,3 +540,60 @@ class MultiLevelNuclearNorm(NuclearNorm):
                                       extra_factor=extra_factor,
                                       num_cores=num_cores))
         return cost
+
+class k_support_norm(object):
+    """The proximity of the k-support norm regularisation
+
+    This class defines the OWL penalization
+
+    Parameters
+    ----------
+    weights : np.ndarray
+        Input array of weights
+    """
+    def __init__(self, k, lmbda):
+        """
+        Parameters:
+        -----------
+        """
+        self.weights = lmbda
+        self.k = k
+
+    def _find_alpha(self, w, q=0, l=None):
+        if l is None:
+            l = w.shape[0] - 1
+        alpha = 0
+        return alpha, q, l
+
+    def _calc_theta(self, w, alpha):
+        S = 0
+        return S
+
+    def op(self, data, extra_factor=1.0):
+        """
+        Define the proximity operator of the OWL norm
+        """
+        alpha, q, l = self._find_alpha(np.abs(data))
+        theta = self._calc_theta(np.abs(data), alpha)
+        rslt = (data * theta) / (theta + self.lmbda)
+        return rslt
+
+    def get_cost(self, data):
+        """Cost function
+        This method calculate the cost function of the proximable part.
+
+        Parameters
+        ----------
+        x: np.ndarray
+            Input array of the sparse code.
+
+        Returns
+        -------
+        The cost of this sparse code
+        """
+        data_abs = np.abs(data)
+        ix = np.argsort(data_abs)[::-1]
+        data_abs = data_abs[ix]  # Sorted absolute value of the data
+        _, q, l = self._find_alpha(data_abs)
+        rslt = data_abs[:q] + data_abs[q+1:] / (self.k - q)
+        return rslt
