@@ -562,12 +562,47 @@ class k_support_norm(object):
     def _find_alpha(self, w, q=0, l=None):
         if l is None:
             l = w.shape[0] - 1
+        # Check if the value is the correct one otherwise compute the following
         alpha = 0
+        data_sorted = np.sort(np.abs(w))[::-1]
+        idx = 0
+        test_l = False
+        test_q = False
+        while ((q < data_sorted.shape[0]) and (l > 0)) or (test_q and test_l):
+            if idx % 2 == 0:
+                # Test relation with q
+                if not test_q:
+                    r_q_0 = (((self.k - q) * 1.0 * data_sorted[q]) /
+                            data_sorted[q+1:l].sum())
+                    r_q_1 = (((self.k - (q+1)) * 1.0 * data_sorted[q+1]) /
+                            data_sorted[q+2:l].sum())
+                    test_q = (r_q_0 > self.lmbda + 1) and (r_q_1 < self.lmbda + 1)
+                    if test_q : print('Relation with q satisfied')
+                    q += 1
+            else:
+                # Test reakation with l
+                if not test_l:
+                    r_l_0 = (((self.k - q) *1.0 * data_sorted[l]) /
+                            data_sorted[q+1:l].sum())
+                    r_l_1 = (((self.k - q) *1.0 * data_sorted[l+1]) /
+                            data_sorted[q+1:l].sum())
+                    test_l = (r_l_0 > self.lmbda) and (r_l_1 < self.lmbda)
+                    if test_l : print('Relation with l satisfied')
+                    l -= 1
+            print(q, l)
+            idx += 1
+            if test_q and test_l:
+                alpha = (self.k - q) / data_sorted[q+1:l].sum()
+
+        # Have to add linear interpolation of alpha
         return alpha, q, l
 
     def _calc_theta(self, w, alpha):
-        S = 0
-        return S
+        theta = np.zeros(w.shape)
+        theta += 1 * ((alpha * np.abs(w)) > (self.lmbda + 1))
+        theta += (alpha * np.abs(w)) * ( (alpha * np.abs(w) <= self.lmbda + 1) &
+                                         (alpha * np.abs(w) >= self.lmbda) )
+        return theta
 
     def op(self, data, extra_factor=1.0):
         """
@@ -595,5 +630,5 @@ class k_support_norm(object):
         ix = np.argsort(data_abs)[::-1]
         data_abs = data_abs[ix]  # Sorted absolute value of the data
         _, q, l = self._find_alpha(data_abs)
-        rslt = data_abs[:q] + data_abs[q+1:] / (self.k - q)
+        rslt = data_abs[:q]**2 + data_abs[q+1:] / (self.k - q)
         return rslt
