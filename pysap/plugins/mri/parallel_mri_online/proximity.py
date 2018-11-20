@@ -564,14 +564,14 @@ class k_support_norm(object):
 
     def _find_alpha(self, w, q=0, l=None):
         if l is None:
-            l = w.shape[0] - 1
+            l = w.shape[0] - 2
         # Check if the value is the correct one otherwise compute the following
         alpha = 0
         data_sorted = np.sort(np.abs(w))[::-1]
         idx = 0
         test_l = False
         test_q = False
-        while ((q < data_sorted.shape[0]) and (l > 0)) or (test_q and test_l):
+        while ((q < data_sorted.shape[0] - 1 ) and (l > 0)) or not (test_q and test_l):
             if idx % 2 == 0:
                 # Test relation with q
                 if not test_q:
@@ -596,6 +596,7 @@ class k_support_norm(object):
             idx += 1
             if test_q and test_l:
                 alpha = (self.k - q) / data_sorted[q+1:l].sum()
+                break;
 
         # Have to add linear interpolation of alpha
         return alpha, q, l
