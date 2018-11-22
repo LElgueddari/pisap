@@ -136,15 +136,15 @@ class NuclearNorm(object):
             if self.num_cores==1:
                 for idx in range(number_of_patches):
                     P[idx, :, :, :] = self._prox_nuclear_norm(
-                        patch=P[idx, :, :, :,],
-                        threshold = threshold
+                        patch=P[idx, :, :, :],
+                        threshold=threshold
                         )
             else:
                 P = Parallel(n_jobs=self.num_cores)(delayed(
-                    self._prox_nuclear_norm)(
-                            patch=P[idx, : ,: ,:],
-                            threshold=threshold)
-                    for idx in range(number_of_patches))
+                            self._prox_nuclear_norm)(
+                            patch=P[idx, :, :, :],
+                            threshold=threshold) for idx in
+                            range(number_of_patches))
             image = reconstruct_overlapped_patches_2d(
                 img_size=np.moveaxis(data, 0, -1).shape,
                 patches=np.asarray(P),
@@ -177,16 +177,16 @@ class NuclearNorm(object):
                                    overlapping_factor=self.overlapping_factor)
             number_of_patches = P.shape[0]
             num_cores = num_cores
-            if num_cores==1:
+            if num_cores == 1:
                 for idx in range(number_of_patches):
                     cost += self._nuclear_norm_cost(
-                        patch=P[idx, :, :, :,]
+                        patch=P[idx, :, :, :]
                         )
             else:
                 print("Using joblib")
                 cost += Parallel(n_jobs=self.num_cores)(delayed(
                     self._cost_nuclear_norm)(
-                        patch=P[idx, : ,: ,:]
+                        patch=P[idx, :, :, :]
                         ) for idx in range(number_of_patches))
 
             return cost * threshold
@@ -195,14 +195,15 @@ class NuclearNorm(object):
                                    overlapping_factor=self.overlapping_factor)
             number_of_patches = P.shape[0]
             threshold = self.weights * extra_factor
-            if num_cores==1:
+            if num_cores == 1:
                 for idx in range(number_of_patches):
                     cost += self._nuclear_norm_cost(
-                        patch=P[idx, :, :, :,])
+                        patch=P[idx, :, :, :])
             else:
                 print("Using joblib")
-                cost += Parallel(n_jobs=num_cores)(delayed(self._nuclear_norm_cost)(
-                            patch=P[idx, : ,: ,:])
+                cost += Parallel(n_jobs=num_cores)(delayed(
+                    self._nuclear_norm_cost)(
+                            patch=P[idx, :, :, :])
                             for idx in range(number_of_patches))
             return cost * threshold
 
@@ -245,8 +246,8 @@ class GroupLasso(object):
         norm_2 = np.linalg.norm(data, axis=0)
 
         np.maximum((1.0 - threshold /
-                         np.maximum(np.finfo(np.float64).eps, np.abs(data))),
-                         0.0) * data
+                    np.maximum(np.finfo(np.float64).eps, np.abs(data))),
+                   0.0) * data
         return data * np.maximum(0, 1.0 - self.weights*extra_factor /
                                  np.maximum(norm_2, np.finfo(np.float32).eps))
 
@@ -306,8 +307,9 @@ class SparseGroupLasso(SparseThreshold, GroupLasso):
 
         """
 
-        return self.prox_op_l2.op(self.prox_op_l1.op(data,
-                                                     extra_factor=extra_factor),
+        return self.prox_op_l2.op(self.prox_op_l1.op(
+                                    data,
+                                    extra_factor=extra_factor),
                                   extra_factor=extra_factor)
 
     def get_cost(self, data):
@@ -345,8 +347,8 @@ class OWL(object):
         self.weights = alpha
         self.mode = mode
         if beta is not None:
-            print("Uses OSCAR: Octogonal Shrinkage and Clustering Algorithm for"
-                   "Regression")
+            print("Uses OSCAR: Octogonal Shrinkage and Clustering Algorithm"
+                  " for Regression")
             if data_shape is None:
                 raise('Data size must be specified if OSCAR is used')
             else:
@@ -425,6 +427,7 @@ class OWL(object):
         warnings.warn('Cost function not implemented yet', UserWarning)
         return 0
 
+
 class MultiLevelNuclearNorm(NuclearNorm):
     """The proximity of the nuclear norm operator
 
@@ -449,7 +452,7 @@ class MultiLevelNuclearNorm(NuclearNorm):
         Parameters:
         -----------
         """
-        if type(weights) is list and type(patch_shape) is list :
+        if type(weights) is list and type(patch_shape) is list:
             if len(weights) != len(patch_shape):
                 raise ValueError("weights and patches_shape must have"
                                  " the same length")
@@ -496,7 +499,7 @@ class MultiLevelNuclearNorm(NuclearNorm):
 
         """
         prox_coeffs = []
-        ## Reshape wavelet coeffs per scale
+        # Reshape wavelet coeffs per scale
         print("Line 497", wavelet_coeffs.shape)
         coeffs = self.linear_op.reshape_coeff_channel(wavelet_coeffs,
                                                       self.linear_op)
@@ -535,14 +538,15 @@ class MultiLevelNuclearNorm(NuclearNorm):
                                                       self.linear_op)
 
         for coeff, weights, patch_shape in zip(coeffs,
-                                                self._weights,
-                                                self._patch_shape):
+                                               self._weights,
+                                               self._patch_shape):
             self.weights = weights
             self.patch_shape = patch_shape
             cost += (super().get_cost(data=coeff,
                                       extra_factor=extra_factor,
                                       num_cores=num_cores))
         return cost
+
 
 class k_support_norm(object):
     """The proximity of the squarre k-support norm regularisation
@@ -599,12 +603,12 @@ class k_support_norm(object):
             Same size as w and each component is equal to theta_i
         """
         theta = np.zeros(w.shape)
-        theta += 1.0*((np.abs(w) * alpha - 2 * self.weights * extra_factor) > 1)
+        theta += 1.0 * ((np.abs(w)*alpha - 2*self.weights*extra_factor) > 1)
         theta += (alpha * np.abs(w) - 2 * self.weights * extra_factor) * (
-                                    ((np.abs(w) * alpha - 2 * self.weights * \
+                                    ((np.abs(w) * alpha - 2 * self.weights *
                                      extra_factor) <= 1) &
-                                    ((np.abs(w) * alpha - 2 * self.weights * \
-                                    extra_factor) >= 0))
+                                    ((np.abs(w) * alpha - 2 * self.weights *
+                                      extra_factor) >= 0))
         return theta
 
     def _interpolate(self, alpha_0, alpha_1, sum_0, sum_1):
@@ -633,7 +637,7 @@ class k_support_norm(object):
         elif sum_1 == self.k:
             return alpha_1
         else:
-            slope = (sum_1 -  sum_0) / (alpha_1 - alpha_0)
+            slope = (sum_1 - sum_0) / (alpha_1 - alpha_0)
             b = sum_0 - slope * sum_1
             alpha_star = (self.k - b) / slope
             return alpha_star
@@ -676,7 +680,6 @@ class k_support_norm(object):
             found = True
             midpoint = 0
 
-
         while (first_idx <= last_idx) and not found and (cnt < alpha.shape[0]):
 
             midpoint = (first_idx + last_idx)//2
@@ -694,7 +697,7 @@ class k_support_norm(object):
                     found = True
                     midpoint = first_idx
 
-                if (np.abs(sum_1 -1e-4) == self.k):
+                if (np.abs(sum_1 - 1e-4) == self.k):
                     found = True
                     midpoint = last_idx - 1
                     # -1 because output is index such that
@@ -761,10 +764,10 @@ class k_support_norm(object):
         from Algorithm1 http://jmlr.org/papers/v17/15-151.html
 
         """
-        alpha = self._find_alpha(np.abs(data), extra_factor)
-        theta = self._compute_theta(np.abs(data), alpha)
-        rslt = (data * theta) / (theta + self.weights * 2 * extra_factor)
-        return rslt
+        alpha = self._find_alpha(np.abs(data.flatten()), extra_factor)
+        theta = self._compute_theta(np.abs(data.flatten()), alpha)
+        rslt = (data.flatten() * theta) / (theta + self.weights*2*extra_factor)
+        return rslt.reshape(data.shape)
 
     def _find_q(self, sorted_data):
         """ Find q index value
@@ -795,7 +798,7 @@ class k_support_norm(object):
         elif (sorted_data[self.k - 1:].sum()) <= sorted_data[self.k-1]:
             found = True
             q = self.k - 1
-        while (not found and cnt ==self.k and (first_idx <= last_idx) and
+        while (not found and cnt == self.k and (first_idx <= last_idx) and
                last_idx < self.k):
             q = (first_idx + last_idx)//2
             cnt += 1
