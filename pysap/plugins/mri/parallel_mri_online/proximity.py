@@ -827,7 +827,7 @@ class k_support_norm(object):
         -------
         The cost of this sparse code
         """
-        data_abs = np.abs(data)
+        data_abs = np.abs(data.flatten())
         ix = np.argsort(data_abs)[::-1]
         data_abs = data_abs[ix]  # Sorted absolute value of the data
         q = self._find_q(data_abs)
