@@ -764,10 +764,11 @@ class k_support_norm(object):
         from Algorithm1 http://jmlr.org/papers/v17/15-151.html
 
         """
+        data_shape = data.shape
         alpha = self._find_alpha(np.abs(data.flatten()), extra_factor)
         theta = self._compute_theta(np.abs(data.flatten()), alpha)
         rslt = (data.flatten() * theta) / (theta + self.weights*2*extra_factor)
-        return rslt.reshape(data.shape)
+        return rslt.reshape(data_shape)
 
     def _find_q(self, sorted_data):
         """ Find q index value
