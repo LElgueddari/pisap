@@ -44,7 +44,8 @@ class NuclearNorm(object):
         if 1 no overlapping will be made,
         if = 2,means 2 patches overlaps
     """
-    def __init__(self, weights, patch_shape, overlapping_factor=1):
+    def __init__(self, weights, patch_shape, overlapping_factor=1,
+                num_cores=1):
         """
         Parameters:
         -----------
@@ -52,6 +53,7 @@ class NuclearNorm(object):
         self.weights = weights
         self.patch_shape = patch_shape
         self.overlapping_factor = overlapping_factor
+        self.num_cores = num_cores
         if self.overlapping_factor == 1:
             print("Patches doesn't overlap")
 
@@ -108,7 +110,7 @@ class NuclearNorm(object):
                                    overlapping_factor=self.overlapping_factor)
             number_of_patches = P.shape[0]
             num_cores = num_cores
-            if num_cores==1:
+            if self.num_cores==1:
                 for idx in range(number_of_patches):
                     P[idx, :, :, :] = self._prox_nuclear_norm(
                         patch=P[idx, :, :, :,],
@@ -116,7 +118,7 @@ class NuclearNorm(object):
                         )
             else:
                 print("Using joblib")
-                P = Parallel(n_jobs=num_cores)(delayed(self._prox_nuclear_norm)(
+                P = Parallel(n_jobs=self.num_cores)(delayed(self._prox_nuclear_norm)(
                             patch=P[idx, : ,: ,:],
                             threshold=threshold) for idx in range(number_of_patches))
 
@@ -131,7 +133,7 @@ class NuclearNorm(object):
             threshold = self.weights * extra_factor
             extraction_step_size=[int(P_shape/self.overlapping_factor) for P_shape
                                   in self.patch_shape]
-            if num_cores==1:
+            if self.num_cores==1:
                 for idx in range(number_of_patches):
                     P[idx, :, :, :] = self._prox_nuclear_norm(
                         patch=P[idx, :, :, :,],
@@ -139,7 +141,7 @@ class NuclearNorm(object):
                         )
             else:
                 print("Using joblib")
-                P = Parallel(n_jobs=num_cores)(delayed(self._prox_nuclear_norm)(
+                P = Parallel(n_jobs=self.num_cores)(delayed(self._prox_nuclear_norm)(
                             patch=P[idx, : ,: ,:],
                             threshold=threshold) for idx in range(number_of_patches))
             image = reconstruct_overlapped_patches_2d(
@@ -181,7 +183,7 @@ class NuclearNorm(object):
                         )
             else:
                 print("Using joblib")
-                cost += Parallel(n_jobs=num_cores)(delayed(
+                cost += Parallel(n_jobs=self.num_cores)(delayed(
                     self._cost_nuclear_norm)(
                         patch=P[idx, : ,: ,:]
                         ) for idx in range(number_of_patches))
