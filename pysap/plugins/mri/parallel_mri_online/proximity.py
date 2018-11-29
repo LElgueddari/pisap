@@ -114,16 +114,16 @@ class NuclearNorm(object):
                 for idx in range(number_of_patches):
                     P[idx, :, :, :] = self._prox_nuclear_norm(
                         patch=P[idx, :, :, :,],
-                        threshold = threshold
-                        )
+                        threshold = threshold)
             else:
-                print("Using joblib")
-                P = Parallel(n_jobs=self.num_cores)(delayed(self._prox_nuclear_norm)(
-                            patch=P[idx, : ,: ,:],
-                            threshold=threshold) for idx in range(number_of_patches))
-
-            output = reconstruct_non_overlapped_patches_2d(patches=P,
-                                                 img_size=data.shape[1:])
+                P = Parallel(n_jobs=self.num_cores)(delayed(
+                    self._prox_nuclear_norm)(
+                                patch=P[idx, : ,: ,:],
+                                threshold=threshold)
+                                for idx in range(number_of_patches))
+            output = reconstruct_non_overlapped_patches_2d(
+                                                patches=np.asarray(P),
+                                                img_size=data.shape[1:])
             return output
         else:
 
@@ -140,13 +140,14 @@ class NuclearNorm(object):
                         threshold = threshold
                         )
             else:
-                print("Using joblib")
-                P = Parallel(n_jobs=self.num_cores)(delayed(self._prox_nuclear_norm)(
+                P = Parallel(n_jobs=self.num_cores)(delayed(
+                    self._prox_nuclear_norm)(
                             patch=P[idx, : ,: ,:],
-                            threshold=threshold) for idx in range(number_of_patches))
+                            threshold=threshold)
+                    for idx in range(number_of_patches))
             image = reconstruct_overlapped_patches_2d(
                 img_size=np.moveaxis(data, 0, -1).shape,
-                patches=P,
+                patches=np.asarray(P),
                 extraction_step_size=extraction_step_size)
             return np.moveaxis(image, -1, 0)
 
