@@ -26,6 +26,65 @@ from pysap.plugins.mri.parallel_mri_online.utils import \
 from sklearn.isotonic import isotonic_regression
 
 
+class ElasticNet(object):
+    """The proximity of the lasso regularisation
+
+    This class defines the group-lasso penalization
+
+    Parameters
+    ----------
+    weights : np.ndarray
+        Input array of weights
+    """
+    def __init__(self, weights_lasso, weights_ridge, linear_op=Identity):
+        """
+        Parameters:
+        -----------
+        """
+        self.prox_op = SparseThreshold(linear=linear_op,
+                                       weights=weights_lasso,
+                                       thresh_type='soft')
+        self.weights_lasso = weights_lasso
+        self.weights_ridge = weights_ridge
+
+    def op(self, data, extra_factor=1.0):
+        """ Operator
+
+        This method returns the input data thresholded by the weights
+
+        Parameters
+        ----------
+        data : DictionaryBase
+            Input data array
+        extra_factor : float
+            Additional multiplication factor
+
+        Returns
+        -------
+        DictionaryBase thresholded data
+
+        """
+        return np.reshape((1.0/(1 + self.weights_lasso*2*self.weights_ridge)) *
+                          self.prox_op._op_method(data.flatten(),
+                                                  extra_factor),
+                          data.shape)
+
+    def get_cost(self, data):
+        """Cost function
+        This method calculate the cost function of the proximable part.
+
+        Parameters
+        ----------
+        x: np.ndarray
+            Input array of the sparse code.
+
+        Returns
+        -------
+        The cost of this sparse code
+        """
+        return self.weights_lasso * np.sum(np.abs(data.flatten())) + \
+               self.weights_ridge * np.sqrt(np.sum(np.abs(data.flatten())**2))
+
 class NuclearNorm(object):
     """The proximity of the nuclear norm operator
 
