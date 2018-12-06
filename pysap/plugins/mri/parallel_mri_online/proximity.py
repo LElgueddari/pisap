@@ -244,12 +244,7 @@ class GroupLasso(object):
         DictionaryBase thresholded data
 
         """
-        threshold = self.weights * extra_factor
         norm_2 = np.linalg.norm(data, axis=0)
-
-        np.maximum((1.0 - threshold /
-                    np.maximum(np.finfo(np.float64).eps, np.abs(data))),
-                   0.0) * data
         return data * np.maximum(0, 1.0 - self.weights*extra_factor /
                                  np.maximum(norm_2, np.finfo(np.float32).eps))
 
