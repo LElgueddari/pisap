@@ -427,13 +427,14 @@ class OWL(object):
         Input array of weights
     """
     def __init__(self, alpha, beta=None, data_shape=None, mode='all',
-                 n_channel=1):
+                 n_channel=1, num_cores=1):
         """
         Parameters:
         -----------
         """
         self.weights = alpha
         self.mode = mode
+        self.num_cores = num_cores
         if beta is not None:
             print("Uses OSCAR: Octogonal Shrinkage and Clustering Algorithm"
                   " for Regression")
@@ -468,8 +469,20 @@ class OWL(object):
         data_abs = data_abs[inv_x]
 
         sign_data = data/np.abs(data)
+        sign_data[np.isnan(sign_data)] = 0
 
         return sign_data * data_abs
+
+    def _reshape_mode_based(self, data):
+        output = []
+        start = 0
+        n_channel = data.shape[0]
+        for band_shape_idx in self.band_shape:
+            n_coeffs = np.prod(band_shape_idx)
+            stop = start + n_coeffs
+            output.append(np.reshape(data[:, start: stop], (n_channel*n_coeffs)))
+            start = stop
+        return output
 
     def op(self, data, extra_factor=1.0):
         """
@@ -479,25 +492,27 @@ class OWL(object):
             threshold = self.weights * extra_factor
             output = self._prox_owl(data.flatten(), threshold)
         elif self.mode is 'band_based':
-            output = np.zeros_like(data)
+            data_r = self._reshape_mode_based(data)
+            output = []
+            output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
+                        data=data_band,
+                        threshold=weights * extra_factor)
+                        for data_band, weights in zip(data_r, self.weights))
+            reshaped_data = np.zeros(data.shape, dtype=data.dtype)
             start = 0
             n_channel = data.shape[0]
-            for band_shape_idx, weights in zip(self.band_shape, self.weights):
-                n_coeffs = np.prod(band_shape_idx)
-                stop = start + n_coeffs
-                reshaped_data = np.reshape(
-                    data[:, start: stop], (n_channel*n_coeffs))
-                output[:, start: stop] = np.reshape(self._prox_owl(
-                    reshaped_data,
-                    weights * extra_factor), (n_channel, n_coeffs))
+
+            for band_shape_idx, band_data in zip(self.band_shape, output):
+                stop = start + np.prod(band_shape_idx)
+                reshaped_data[:, start : stop] = np.reshape(band_data, (n_channel, np.prod(band_shape_idx)))
                 start = stop
+            output = np.asarray(reshaped_data).T
         elif self.mode is 'coeff_based':
             threshold = self.weights * extra_factor
-            output = np.zeros_like(data)
-            for idx in range(data.shape[1]):
-                output[:, idx] = self._prox_owl(np.squeeze(data[:, idx]),
-                                                threshold)
-        return output
+            output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
+                        data=np.squeeze(data[:, idx]),
+                        threshold=threshold) for idx in range(data.shape[1]))
+        return np.asarray(output).T
 
     def get_cost(self, data):
         """Cost function
