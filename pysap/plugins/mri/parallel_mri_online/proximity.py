@@ -104,11 +104,19 @@ class NuclearNorm(object):
         if = 2,means 2 patches overlaps
     """
     def __init__(self, weights, patch_shape, overlapping_factor=1,
-                num_cores=1):
+                num_cores=1, mode="image", linear_op=None):
         """
         Parameters:
         -----------
         """
+        if not mode in ["image", "sparse"]:
+            raise ValueError('The specified mode should be either image or',
+                              'sparse coefficients')
+        self.mode = mode
+        if mode == "sparse" and linear_op is None:
+            raise ValueError("The linear operator should be specified for the",
+                             "sparse mode penalization")
+        self.linear_op = linear_op
         self.weights = weights
         self.patch_shape = patch_shape
         self.overlapping_factor = overlapping_factor
@@ -119,7 +127,7 @@ class NuclearNorm(object):
     def _prox_nuclear_norm(self, patch, threshold):
         u, s, vh = np.linalg.svd(np.reshape(
             patch,
-            (np.prod(self.patch_shape[:-1]), patch.shape[-1])),
+            (np.prod(patch.shape[:-1]), patch.shape[-1])),
             full_matrices=False)
         s = s * np.maximum(1 - threshold / np.maximum(
                                             np.finfo(np.float32).eps,
@@ -132,7 +140,7 @@ class NuclearNorm(object):
     def _nuclear_norm_cost(self, patch):
         _, s, _ = np.linalg.svd(np.reshape(
             patch,
-            (np.prod(self.patch_shape[:-1]), patch.shape[-1])),
+            (np.prod(patch.shape[:-1]), patch.shape[-1])),
             full_matrices=False)
         return np.sum(np.abs(s.flatten()))
 
@@ -156,59 +164,85 @@ class NuclearNorm(object):
 
         """
         threshold = self.weights * extra_factor
-        if data.shape[1:] == self.patch_shape:
-            images = np.moveaxis(data, 0, -1)
-            images = self._prox_nuclear_norm(patch=np.reshape(
-                np.moveaxis(data, 0, -1),
-                (np.prod(self.patch_shape), data.shape[0])),
-                threshold=threshold)
-            return np.moveaxis(images, -1, 0)
-        elif self.overlapping_factor == 1:
-            P = extract_patches_2d(np.moveaxis(data, 0, -1),
-                                   self.patch_shape,
-                                   overlapping_factor=self.overlapping_factor)
-            number_of_patches = P.shape[0]
-            num_cores = num_cores
-            if self.num_cores==1:
-                for idx in range(number_of_patches):
-                    P[idx, :, :, :] = self._prox_nuclear_norm(
-                        patch=P[idx, :, :, :,],
-                        threshold = threshold)
+        if self.mode == "image":
+            if data.shape[1:] == self.patch_shape:
+                images = np.moveaxis(data, 0, -1)
+                images = self._prox_nuclear_norm(patch=np.reshape(
+                    np.moveaxis(data, 0, -1),
+                    (np.prod(self.patch_shape), data.shape[0])),
+                    threshold=threshold)
+                return np.moveaxis(images, -1, 0)
+            elif self.overlapping_factor == 1:
+                P = extract_patches_2d(np.moveaxis(data, 0, -1),
+                                       self.patch_shape,
+                                       overlapping_factor=self.overlapping_factor)
+                number_of_patches = P.shape[0]
+                num_cores = num_cores
+                if self.num_cores==1:
+                    for idx in range(number_of_patches):
+                        P[idx, :, :, :] = self._prox_nuclear_norm(
+                            patch=P[idx, :, :, :,],
+                            threshold = threshold)
+                else:
+                    P = Parallel(n_jobs=self.num_cores)(delayed(
+                        self._prox_nuclear_norm)(
+                                    patch=P[idx, : ,: ,:],
+                                    threshold=threshold)
+                                    for idx in range(number_of_patches))
+                output = reconstruct_non_overlapped_patches_2d(
+                                                    patches=np.asarray(P),
+                                                    img_size=data.shape[1:])
+                return output
             else:
-                P = Parallel(n_jobs=self.num_cores)(delayed(
-                    self._prox_nuclear_norm)(
-                                patch=P[idx, : ,: ,:],
-                                threshold=threshold)
-                                for idx in range(number_of_patches))
-            output = reconstruct_non_overlapped_patches_2d(
-                                                patches=np.asarray(P),
-                                                img_size=data.shape[1:])
-            return output
-        else:
-
-            P = extract_patches_2d(np.moveaxis(data, 0, -1), self.patch_shape,
-                                   overlapping_factor=self.overlapping_factor)
-            number_of_patches = P.shape[0]
-            threshold = self.weights * extra_factor
-            extraction_step_size=[int(P_shape/self.overlapping_factor) for P_shape
-                                  in self.patch_shape]
-            if self.num_cores==1:
-                for idx in range(number_of_patches):
-                    P[idx, :, :, :] = self._prox_nuclear_norm(
-                        patch=P[idx, :, :, :],
-                        threshold=threshold
-                        )
-            else:
-                P = Parallel(n_jobs=self.num_cores)(delayed(
-                            self._prox_nuclear_norm)(
+                P = extract_patches_2d(np.moveaxis(data, 0, -1), self.patch_shape,
+                                       overlapping_factor=self.overlapping_factor)
+                number_of_patches = P.shape[0]
+                threshold = self.weights * extra_factor
+                extraction_step_size=[int(P_shape/self.overlapping_factor) for P_shape
+                                      in self.patch_shape]
+                if self.num_cores==1:
+                    for idx in range(number_of_patches):
+                        P[idx, :, :, :] = self._prox_nuclear_norm(
                             patch=P[idx, :, :, :],
-                            threshold=threshold) for idx in
-                            range(number_of_patches))
-            image = reconstruct_overlapped_patches_2d(
-                img_size=np.moveaxis(data, 0, -1).shape,
-                patches=np.asarray(P),
-                extraction_step_size=extraction_step_size)
-            return np.moveaxis(image, -1, 0)
+                            threshold=threshold)
+                else:
+                    P = Parallel(n_jobs=self.num_cores)(delayed(
+                                self._prox_nuclear_norm)(
+                                patch=P[idx, :, :, :],
+                                threshold=threshold) for idx in
+                                range(number_of_patches))
+                image = reconstruct_overlapped_patches_2d(
+                    img_size=np.moveaxis(data, 0, -1).shape,
+                    patches=np.asarray(P),
+                    extraction_step_size=extraction_step_size)
+                return np.moveaxis(image, -1, 0)
+        elif self.mode == 'sparse':
+            #have to do something
+            coeffs = [self.linear_op.unflatten(
+                      data[ch],
+                      self.linear_op.coeffs_shape[ch])
+                      for ch in range(data.shape[0])]
+            reordered_coeffs = []
+            for coeff_idx in range(len(coeffs[0])):
+                tmp = []
+                for ch in range(data.shape[0]):
+                    tmp.append(coeffs[ch][coeff_idx])
+                reordered_coeffs.append(np.moveaxis(np.asarray(tmp), 0, -1))
+            number_of_patches = len(reordered_coeffs)
+            P = Parallel(n_jobs=self.num_cores)(delayed(
+                self._prox_nuclear_norm)(
+                            patch=reordered_coeffs[idx],
+                            threshold=threshold)
+                            for idx in range(number_of_patches))
+            # Equivalent to reconstruct patches
+            output = []
+            for ch in range(data.shape[0]):
+                tmp = []
+                for coeff_idx in range(len(coeffs[0])):
+                    tmp.append(P[coeff_idx][..., ch])
+                r_coeffs, _ = self.linear_op.flatten(tmp)
+                output.append(r_coeffs)
+            return np.asarray(output)
 
     def get_cost(self, data, extra_factor=1.0, num_cores=1):
         """Cost function
@@ -364,7 +398,7 @@ class SparseGroupLasso(SparseThreshold, GroupLasso):
         return self.prox_op_l2.op(self.prox_op_l1.op(
                                     data,
                                     extra_factor=extra_factor),
-                                  extra_factor=extra_factor)
+                                    extra_factor=extra_factor)
 
     def get_cost(self, data):
         """Cost function
@@ -480,126 +514,6 @@ class OWL(object):
         """
         warnings.warn('Cost function not implemented yet', UserWarning)
         return 0
-
-
-class MultiLevelNuclearNorm(NuclearNorm):
-    """The proximity of the nuclear norm operator
-
-    This class defines the nuclear norm proximity operator on a patch based
-    method
-
-    Parameters
-    ----------
-    weights : np.ndarray
-        Input array of weights
-    thresh_type : str {'hard', 'soft'}, optional
-        Threshold type (default is 'soft')
-    patch_size: int
-        Size of the patches to impose the low rank constraints
-    overlapping_factor: int
-        if 1 no overlapping will be made,
-        if = 2,means 2 patches overlaps
-    """
-    def __init__(self, weights, patch_shape, linear_op=None,
-                 overlapping_factor=1):
-        """
-        Parameters:
-        -----------
-        """
-        if type(weights) is list and type(patch_shape) is list:
-            if len(weights) != len(patch_shape):
-                raise ValueError("weights and patches_shape must have"
-                                 " the same length")
-            else:
-                self._weights = weights
-                self._patch_shape = patch_shape
-        else:
-            if type(weights) is list:
-                warnings.warn("Same patch_shape will be applied over the "
-                              "scales")
-                self._weights = weights
-                self._patch_shape = [patch_shape for _ in range(len(weights))]
-            elif type(patch_shape) is list:
-                warnings.warn("Same weights will be applied over the "
-                              "scales")
-                self._patch_shape = patch_shape
-                self._weights = [weights for _ in range(len(patch_shape))]
-            else:
-                nb_band = linear_op.transform.nb_band_per_scale
-                self._patch_shape = [patch_shape for _ in range(nb_band)]
-                self._weights = [weights for _ in range(nb_band)]
-        self.linear_op = linear_op
-
-        NuclearNorm.__init__(self, weights[0], patch_shape[0],
-                             overlapping_factor=overlapping_factor)
-
-    def op(self, wavelet_coeffs, extra_factor=1.0, num_cores=1):
-        """ Operator
-
-        This method returns the input data thresholded by the weights
-
-        Parameters
-        ----------
-        data : DictionaryBase
-            Input data array
-        extra_factor : float
-            Additional multiplication factor
-        num_cores: int
-            Number of cores used to parrallelize the computation
-
-        Returns
-        -------
-        DictionaryBase thresholded data
-
-        """
-        prox_coeffs = []
-        # Reshape wavelet coeffs per scale
-        print("Line 497", wavelet_coeffs.shape)
-        coeffs = self.linear_op.reshape_coeff_channel(wavelet_coeffs,
-                                                      self.linear_op)
-
-        for coeffs_per_band, weights, patch_shape in zip(coeffs,
-                                                         self._weights,
-                                                         self._patch_shape):
-            self.weights = weights
-            self.patch_shape = patch_shape
-            prox_coeffs.append(super().op(data=coeffs_per_band,
-                                          extra_factor=extra_factor,
-                                          num_cores=num_cores))
-        prox_coeffs = self.linear_op.reshape_channel_coeff(prox_coeffs,
-                                                           self.linear_op)
-        rslt = []
-        for coeff in prox_coeffs:
-            coeff_flt, _ = self.linear_op.flatten(coeff)
-            rslt.append(coeff_flt)
-        return np.asarray(rslt)
-
-    def get_cost(self, wavelet_coeffs, extra_factor=1.0, num_cores=1):
-        """Cost function
-        This method calculate the cost function of the proximable part.
-
-        Parameters
-        ----------
-        x: np.ndarray
-            Input array of the sparse code.
-
-        Returns
-        -------
-        The cost of this sparse code
-        """
-        cost = 0
-        coeffs = self.linear_op.reshape_coeff_channel(wavelet_coeffs,
-                                                      self.linear_op)
-
-        for coeff, weights, patch_shape in zip(coeffs,
-                                               self._weights,
-                                               self._patch_shape):
-            self.weights = weights
-            self.patch_shape = patch_shape
-            cost += (super().get_cost(data=coeff,
-                                      extra_factor=extra_factor,
-                                      num_cores=num_cores))
-        return cost
 
 
 class k_support_norm(object):
