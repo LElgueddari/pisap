@@ -429,7 +429,7 @@ class OWL(object):
     weights : np.ndarray
         Input array of weights
     """
-    def __init__(self, alpha, beta=None, data_shape=None, mode='all',
+    def __init__(self, alpha, beta=None, bands_shape=None, mode='all',
                  n_channel=1, num_cores=1):
         """
         Parameters:
@@ -441,16 +441,28 @@ class OWL(object):
         if beta is not None:
             print("Uses OSCAR: Octogonal Shrinkage and Clustering Algorithm"
                   " for Regression")
-            if data_shape is None:
+            if bands_shape is None:
                 raise('Data size must be specified if OSCAR is used')
             else:
                 if self.mode is 'all':
-                    self.weights = _oscar_weights(alpha, beta,
-                                                  data_shape * n_channel)
+                    data_shape = 0
+                    if n_channel > 1:
+                        for band_shape in bands_shape[0]:
+                            data_shape += np.prod(band_shape)
+                    elif n_channel == 1:
+                        for band_shape in bands_shape:
+                            data_shape += np.prod(band_shape)
+                    self.weights = np.reshape(_oscar_weights(alpha, beta,
+                                                  data_shape * n_channel), (n_channel, data_shape))
                 elif self.mode is 'band_based':
-                    self.band_shape = data_shape
+                    if n_channel > 1:
+                        self.band_shape = bands_shape[0]
+                    elif n_channel == 1:
+                        self.band_shape = bands_shape
+                    else:
+                        raise ValueError('Number of channels must be strictly positive')
                     self.weights = []
-                    for band_shape in data_shape:
+                    for band_shape in self.band_shape:
                         self.weights.append(_oscar_weights(
                             alpha, beta, n_channel * np.prod(band_shape)))
                 elif self.mode is 'coeff_based':
@@ -492,8 +504,10 @@ class OWL(object):
         Define the proximity operator of the OWL norm
         """
         if self.mode is 'all':
-            threshold = self.weights * extra_factor
-            output = self._prox_owl(data.flatten(), threshold)
+            threshold = self.weights.flatten() * extra_factor
+            output = np.reshape(self._prox_owl(data.flatten(), threshold),
+                                data.shape)
+            return output
         elif self.mode is 'band_based':
             data_r = self._reshape_mode_based(data)
             output = []
