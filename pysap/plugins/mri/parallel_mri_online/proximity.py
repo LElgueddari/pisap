@@ -244,7 +244,7 @@ class NuclearNorm(object):
                 output.append(r_coeffs)
             return np.asarray(output)
 
-    def get_cost(self, data, extra_factor=1.0, num_cores=1):
+    def get_cost(self, data, extra_factor=1.0):
         """Cost function
         This method calculate the cost function of the proximable part.
 
@@ -259,46 +259,49 @@ class NuclearNorm(object):
         """
         cost = 0
         threshold = self.weights * extra_factor
-        if data.shape[1:] == self.patch_shape:
-            cost += self._nuclear_norm_cost(patch=np.reshape(
-                np.moveaxis(data, 0, -1),
-                (np.prod(self.patch_shape), data.shape[0])))
-            return cost * threshold
-        elif self.overlapping_factor == 1:
-            P = extract_patches_2d(np.moveaxis(data, 0, -1),
-                                   self.patch_shape,
-                                   overlapping_factor=self.overlapping_factor)
-            number_of_patches = P.shape[0]
-            num_cores = num_cores
-            if num_cores == 1:
-                for idx in range(number_of_patches):
-                    cost += self._nuclear_norm_cost(
-                        patch=P[idx, :, :, :]
-                        )
-            else:
-                print("Using joblib")
-                cost += Parallel(n_jobs=self.num_cores)(delayed(
+        if self.mode == "image":
+            if data.shape[1:] == self.patch_shape:
+                cost += self._nuclear_norm_cost(patch=np.reshape(
+                    np.moveaxis(data, 0, -1),
+                    (np.prod(self.patch_shape), data.shape[0])))
+            elif self.overlapping_factor == 1:
+                P = extract_patches_2d(np.moveaxis(data, 0, -1),
+                                       self.patch_shape,
+                                       overlapping_factor=self.overlapping_factor)
+                number_of_patches = P.shape[0]
+                cost_list = Parallel(n_jobs=self.num_cores)(delayed(
                     self._cost_nuclear_norm)(
                         patch=P[idx, :, :, :]
                         ) for idx in range(number_of_patches))
-
-            return cost * threshold
-        else:
-            P = extract_patches_2d(np.moveaxis(data, 0, -1), self.patch_shape,
-                                   overlapping_factor=self.overlapping_factor)
-            number_of_patches = P.shape[0]
-            threshold = self.weights * extra_factor
-            if num_cores == 1:
-                for idx in range(number_of_patches):
-                    cost += self._nuclear_norm_cost(
-                        patch=P[idx, :, :, :])
+                cost = np.asarray(cost_list).sum()
             else:
-                print("Using joblib")
-                cost += Parallel(n_jobs=num_cores)(delayed(
+                P = extract_patches_2d(np.moveaxis(data, 0, -1), self.patch_shape,
+                                       overlapping_factor=self.overlapping_factor)
+                number_of_patches = P.shape[0]
+                threshold = self.weights * extra_factor
+                cost_list = Parallel(n_jobs=self.num_cores)(delayed(
                     self._nuclear_norm_cost)(
                             patch=P[idx, :, :, :])
                             for idx in range(number_of_patches))
-            return cost * threshold
+                cost = np.asarray(cost_list).sum()
+        elif self.mode == "sparse":
+            coeffs = [self.linear_op.unflatten(
+                      data[ch],
+                      self.linear_op.coeffs_shape[ch])
+                      for ch in range(data.shape[0])]
+            reordered_coeffs = []
+            for coeff_idx in range(len(coeffs[0])):
+                tmp = []
+                for ch in range(data.shape[0]):
+                    tmp.append(coeffs[ch][coeff_idx])
+                reordered_coeffs.append(np.moveaxis(np.asarray(tmp), 0, -1))
+            number_of_patches = len(reordered_coeffs)
+            cost_list = Parallel(n_jobs=self.num_cores)(delayed(
+                self._nuclear_norm_cost)(
+                            patch=reordered_coeffs[idx])
+                            for idx in range(number_of_patches))
+            cost = np.asarray(cost_list).sum()
+        return cost * threshold
 
 
 class GroupLasso(object):
