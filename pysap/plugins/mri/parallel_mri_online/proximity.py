@@ -144,7 +144,7 @@ class NuclearNorm(object):
             full_matrices=False)
         return np.sum(np.abs(s.flatten()))
 
-    def op(self, data, extra_factor=1.0, num_cores=1):
+    def op(self, data, extra_factor=1.0):
         """ Operator
 
         This method returns the input data thresholded by the weights
@@ -155,8 +155,6 @@ class NuclearNorm(object):
             Input data array
         extra_factor : float
             Additional multiplication factor
-        num_cores: int
-            Number of cores used to parrallelize the computation
 
         Returns
         -------
@@ -177,7 +175,6 @@ class NuclearNorm(object):
                                        self.patch_shape,
                                        overlapping_factor=self.overlapping_factor)
                 number_of_patches = P.shape[0]
-                num_cores = num_cores
                 if self.num_cores==1:
                     for idx in range(number_of_patches):
                         P[idx, :, :, :] = self._prox_nuclear_norm(
