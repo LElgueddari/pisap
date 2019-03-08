@@ -352,7 +352,7 @@ class GroupLasso(object):
         -------
         The cost of this sparse code
         """
-        return np.sum(np.linalg.norm(data, axis=0))
+        return np.sum(self.weights * np.linalg.norm(data, axis=0))
 
 
 class SparseGroupLasso(SparseThreshold, GroupLasso):
@@ -449,8 +449,11 @@ class OWL(object):
                     elif n_channel == 1:
                         for band_shape in bands_shape:
                             data_shape += np.prod(band_shape)
-                    self.weights = np.reshape(_oscar_weights(alpha, beta,
-                                                  data_shape * n_channel), (n_channel, data_shape))
+                    self.weights = np.reshape(_oscar_weights(
+                                                alpha,
+                                                beta,
+                                                data_shape * n_channel),
+                                            (n_channel, data_shape))
                 elif self.mode is 'band_based':
                     if n_channel > 1:
                         self.band_shape = bands_shape[0]
@@ -528,6 +531,13 @@ class OWL(object):
                         threshold=threshold) for idx in range(data.shape[1]))
         return np.asarray(output).T
 
+    def _cost(sel, weights, data):
+        """Implement the basic cost function of OWL
+        Return sum(sorted(weights) * sorted(abs(data)))
+        """
+        return np.sum(np.sort(np.abs(weights.flatten())) *
+                      np.sort(np.abs(data.flatten())))
+
     def get_cost(self, data):
         """Cost function
         This method calculate the cost function of the proximable part.
@@ -541,8 +551,21 @@ class OWL(object):
         -------
         The cost of this sparse code
         """
-        warnings.warn('Cost function not implemented yet', UserWarning)
-        return 0
+        if self.mode is 'all':
+            return self._cost(self.weights, data.flatten())
+        elif self.mode is 'band_based':
+            data_r = self._reshape_mode_based(data)
+            output = []
+            output = Parallel(n_jobs=self.num_cores)(delayed(self._cost)(
+                        data=data_band,
+                        weights=weights)
+                        for data_band, weights in zip(data_r, self.weights))
+            return np.sum(np.asarray(output))
+        elif self.mode is 'coeff_based':
+            output = Parallel(n_jobs=self.num_cores)(delayed(self._cost)(
+                        data=np.squeeze(data[:, idx]),
+                        weights=self.weights) for idx in range(data.shape[1]))
+            return np.sum(np.asarray(output))
 
 
 class k_support_norm(object):
