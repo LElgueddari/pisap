@@ -144,6 +144,12 @@ def sparse_rec_fista(data, wavelet_name, samples, mu, nb_scales=4,
     end = time.clock()
     if verbose > 0:
         print("Starting optimization...")
+    cost = []
+    for idx in range(max_nb_of_iter):
+        opt._update()
+        cost.append(gradient_op._cost_method(opt._x_new) + np.abs(np.sum(weights * np.abs(opt._x_new))))
+        print(cost[-1])
+    opt.x_final = opt._x_new
     opt.iterate(max_iter=max_nb_of_iter)
     if verbose > 0:
         # cost_op.plot_cost()
@@ -155,7 +161,7 @@ def sparse_rec_fista(data, wavelet_name, samples, mu, nb_scales=4,
         print("-" * 40)
     x_final = linear_op.adj_op(opt.x_final)
 
-    return x_final, linear_op.transform
+    return x_final, linear_op.transform, cost
 
 
 def sparse_rec_condatvu(data, wavelet_name, samples, nb_scales=4,
