@@ -195,7 +195,8 @@ class NUFFT(FourierBase, Singleton):
     """
     numOfInstances = 0
 
-    def __init__(self, samples, shape, platform='cpu', Kd=None, Jd=None):
+    def __init__(self, samples, shape, platform='cpu', Kd=None, Jd=None,
+                 n_coils=1, verbosity=0):
         """ Initilize the 'NUFFT' class.
 
         Parameters
@@ -214,9 +215,14 @@ class NUFFT(FourierBase, Singleton):
         Jd: int or tuple
             Size of the interpolator kernel. If int, will be evaluated
             to (Jd,)*dims image
+        n_coils: int
+            Number of coils used to acquire the signal in case of multiarray
+            receiver coils
 
         """
-
+        if (n_coils < 1) or (type(n_coils) is not int):
+            raise ValueError('The number of coils should be an integer >= 1')
+        self.nb_coils = n_coils
         self.shape = shape
         self.platform = platform
         self.samples = samples * (2 * np.pi)  # Pynufft use samples in
@@ -229,15 +235,15 @@ class NUFFT(FourierBase, Singleton):
             self.Kd = Kd
         elif Kd is None:
             # Preferential option
-            self.Kd = shape
+            self.Kd = tuple([2*ix for ix in shape])
 
         if type(Jd) == int:
             self.Jd = (Jd,)*self.dim
-        elif type(Kd) == tuple:
+        elif type(Jd) == tuple:
             self.Jd = Jd
         elif Jd is None:
             # Preferential option
-            self.Jd = (1,)*self.dim
+            self.Jd = (5,)*self.dim
 
         for (i, s) in enumerate(shape):
             assert(self.shape[i] <= self.Kd[i]), 'size of frequency grid' + \
@@ -246,14 +252,27 @@ class NUFFT(FourierBase, Singleton):
         print('Creating the NUFFT object...')
         if self.platform == 'cpu':
             self.nufftObj = NUFFT_cpu()
-            self.nufftObj.plan(self.samples, self.shape, self.Kd, self.Jd)
+            self.nufftObj.plan(om=self.samples,
+                               Nd=self.shape,
+                               Kd=self.Kd,
+                               Jd=self.Jd,
+                               batch=self.nb_coils)
 
         elif self.platform == 'mcpu':
             warn('Attemping to use OpenCL plateform. Make sure to '
                  'have  all the dependecies installed')
-            self.nufftObj = NUFFT_hsa()
-            self.nufftObj.plan(self.samples, self.shape, self.Kd, self.Jd)
-            self.nufftObj.offload('ocl')  # for multi-CPU computation
+            self.nufftObj = NUFFT_hsa(API='ocl',
+                                      platform_number=None,
+                                      device_number=None,
+                                      verbosity=verbosity)
+
+            self.nufftObj.plan(om=self.samples,
+                               Nd=self.shape,
+                               Kd=self.Kd,
+                               Jd=self.Jd,
+                               batch=1,  # self.nb_coils,
+                               ft_axes=tuple(range(samples.shape[1])),
+                               radix=None)
 
         elif self.platform == 'gpu':
             Singleton.__init__(self)
@@ -264,9 +283,18 @@ class NUFFT(FourierBase, Singleton):
             if self.getNumInstances() > 1:
                 raise RuntimeError('You have created more than one GPU NUFFT'
                                    ' object')
-            self.nufftObj = NUFFT_hsa()
-            self.nufftObj.plan(self.samples, self.shape, self.Kd, self.Jd)
-            self.nufftObj.offload('cuda')  # for GPU computation
+            self.nufftObj = NUFFT_hsa(API='cuda',
+                                      platform_number=None,
+                                      device_number=None,
+                                      verbosity=verbosity)
+
+            self.nufftObj.plan(om=self.samples,
+                               Nd=self.shape,
+                               Kd=self.Kd,
+                               Jd=self.Jd,
+                               batch=1,  # self.nb_coils,
+                               ft_axes=tuple(range(samples.shape[1])),
+                               radix=None)
 
         else:
             raise ValueError('Wrong type of platform. Platform must be'
@@ -286,17 +314,34 @@ class NUFFT(FourierBase, Singleton):
         x: np.ndarray
             masked Fourier transform of the input image.
         """
-        if (self.platform == 'cpu'):
-            y = self.nufftObj.forward(img)
+        if self.nb_coils == 1:
+            if (self.platform == 'cpu'):
+                y = np.squeeze(self.nufftObj.forward(img))
+            else:
+                dtype = np.complex64
+                # Send data to the mCPU/GPU platform
+                self.nufftObj.x_Nd = self.nufftObj.thr.to_device(
+                    img.astype(dtype))
+                gx = self.nufftObj.thr.copy_array(self.nufftObj.x_Nd)
+                # Forward operator of the NUFFT
+                gy = self.nufftObj.forward(gx)
+                y = np.squeeze(gy.get())
         else:
-            dtype = np.complex64
-            # Send data to the mCPU/GPU platform
-            self.nufftObj.x_Nd = self.nufftObj.thr.to_device(img.astype(dtype))
-            gx = self.nufftObj.thr.copy_array(self.nufftObj.x_Nd)
-            # Forward operator of the NUFFT
-            gy = self.nufftObj.forward(gx)
-            y = gy.get()
-
+            if (self.platform == 'cpu'):
+                y = np.moveaxis(self.nufftObj.forward(np.copy(np.moveaxis(
+                    img, 0, -1))), -1, 0)
+            else:
+                dtype = np.complex64
+                # Send data to the mCPU/GPU platform
+                y = []
+                for ch in range(self.nb_coils):
+                    self.nufftObj.x_Nd = self.nufftObj.thr.to_device(
+                        np.copy(img[ch]).astype(dtype))
+                    gx = self.nufftObj.thr.copy_array(self.nufftObj.x_Nd)
+                    # Forward operator of the NUFFT
+                    gy = self.nufftObj.forward(gx)
+                    y.append(np.squeeze(gy.get()))
+                y = np.asarray(y)
         return y * 1.0 / np.sqrt(np.prod(self.shape))
 
     def adj_op(self, x):
@@ -313,12 +358,25 @@ class NUFFT(FourierBase, Singleton):
         img: np.ndarray
             inverse 3D discrete Fourier transform of the input coefficients.
         """
-        if self.platform == 'cpu':
-            img = self.nufftObj.adjoint(x)
+        if self.nb_coils == 1:
+            if self.platform == 'cpu':
+                img = np.squeeze(self.nufftObj.adjoint(x))
+            else:
+                dtype = np.complex64
+                cuda_array = self.nufftObj.thr.to_device(x.astype(dtype))
+                gx = self.nufftObj.adjoint(cuda_array)
+                img = np.squeeze(gx.get())
         else:
-            dtype = np.complex64
-            cuda_array = self.nufftObj.thr.to_device(x.astype(dtype))
-            gx = self.nufftObj.adjoint(cuda_array)
-            img = gx.get()
-
+            if self.platform == 'cpu':
+                img = np.moveaxis(self.nufftObj.adjoint(np.moveaxis(x, 0, -1)),
+                                  -1, 0)
+            else:
+                dtype = np.complex64
+                img = []
+                for ch in range(self.nb_coils):
+                    cuda_array = self.nufftObj.thr.to_device(np.copy(
+                        x[ch]).astype(dtype))
+                    gx = self.nufftObj.adjoint(cuda_array)
+                    img.append(gx.get())
+                img = np.asarray(np.squeeze(img))
         return img * np.sqrt(np.prod(self.shape))
