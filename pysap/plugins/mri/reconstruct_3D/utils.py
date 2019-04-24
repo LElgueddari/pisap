@@ -134,11 +134,13 @@ def flatten_swtn(x, multichannel=False):
             for key in x[i].keys():
                 dict_lvl.append((key, x[i][key].shape))
                 if y.shape[0] == 0:
-                    y = np.asarray(x[i][key].reshape(x[i][key].shape[0],
-                                                         np.prod(x[i][key].shape[1:])))
+                    y = np.asarray(x[i][key].reshape(
+                        x[i][key].shape[0],
+                        np.prod(x[i][key].shape[1:])))
                 else:
-                    y = np.concatenate((y, x[i][key].reshape(x[i][key].shape[0],
-                                                         np.prod(x[i][key].shape[1:]))), axis=-1)
+                    y = np.concatenate((y, x[i][key].reshape(
+                        x[i][key].shape[0],
+                        np.prod(x[i][key].shape[1:]))), axis=-1)
             shape_dict.append(dict_lvl)
     else:
         # Flatten the dataset
