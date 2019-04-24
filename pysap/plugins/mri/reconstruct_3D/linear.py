@@ -13,22 +13,24 @@ This module contains linears operators classes.
 
 # Package import
 import pysap
-from .utils import flatten_swtn
-from .utils import unflatten_swtn
-from .utils import flatten_wave
-from .utils import unflatten_wave
+from pysap.plugins.mri.reconstruct_3D.utils import flatten_swtn
+from pysap.plugins.mri.reconstruct_3D.utils import unflatten_swtn
+from pysap.plugins.mri.reconstruct_3D.utils import flatten_wave
+from pysap.plugins.mri.reconstruct_3D.utils import unflatten_wave
 
 # Third party import
 import numpy
 import pywt
+import warnings
 
 
 class pyWavelet3(object):
     """ The 3D wavelet transform class from pyWavelets package.
     """
-    def __init__(self, wavelet_name, nb_scale=4, verbose=0, undecimated=False):
+    def __init__(self, wavelet_name, nb_scale=4, verbose=0, undecimated=False,
+                 multichannel=False, num_cores=1):
         """ Initialize the 'pyWavelet3' class.
-            print(x_new.shape)
+            (x_new.shape)
         Parameters
         ----------
         wavelet_name: str
@@ -46,7 +48,9 @@ class pyWavelet3(object):
                 "Unknown transformation '{0}'.".format(wavelet_name))
         self.transform = pywt.Wavelet(wavelet_name)
         self.nb_scale = nb_scale-1
+        self.num_cores = num_cores
         self.undecimated = undecimated
+        self.multichannel = multichannel
         self.unflatten = unflatten_swtn if undecimated else unflatten_wave
         self.flatten = flatten_swtn if undecimated else flatten_wave
         self.coeffs_shape = None
@@ -72,18 +76,25 @@ class pyWavelet3(object):
         coeffs: ndarray
             the wavelet coefficients.
         """
-        if isinstance(data, numpy.ndarray):
-            data = pysap.Image(data=data)
+        # if isinstance(data, numpy.ndarray):
+        #     data = pysap.Image(data=data)
+        axes = tuple(range(1, data.ndim)) if self.multichannel else None
         if self.undecimated:
-            coeffs_dict = pywt.swtn(data, self.transform, level=self.nb_scale)
-            coeffs, self.coeffs_shape = flatten_swtn(coeffs_dict)
-            return coeffs
+            warnings.warn('Data size should a power of 2')
+            coeffs_dict = pywt.swtn(data,
+                                    self.transform,
+                                    level=self.nb_scale,
+                                    axes=axes)
         else:
             coeffs_dict = pywt.wavedecn(data,
                                         self.transform,
-                                        level=self.nb_scale)
-            self.coeffs, self.coeffs_shape = flatten_wave(coeffs_dict)
-            return self.coeffs
+                                        level=self.nb_scale,
+                                        mode='zero',
+                                        axes=axes)
+        self.coeffs, self.coeffs_shape = self.flatten(
+            coeffs_dict,
+            multichannel=self.multichannel)
+        return self.coeffs
 
     def adj_op(self, coeffs, dtype="array"):
         """ Define the wavelet adjoint operator.
@@ -104,15 +115,22 @@ class pyWavelet3(object):
             the reconstructed data.
         """
         self.coeffs = coeffs
+        coeffs_dict = self.unflatten(coeffs, self.coeffs_shape,
+                                     multichannel=self.multichannel)
+
         if self.undecimated:
-            coeffs_dict = unflatten_swtn(coeffs, self.coeffs_shape)
+            axes = tuple(range(1, coeffs_dict[0][list(
+                coeffs_dict[0])[0]].ndim)) if self.multichannel else None
             data = pywt.iswtn(coeffs_dict,
-                              self.transform)
+                              self.transform,
+                              axes=axes)
         else:
-            coeffs_dict = unflatten_wave(coeffs, self.coeffs_shape)
-            data = pywt.waverecn(
-                coeffs=coeffs_dict,
-                wavelet=self.transform)
+            axes = tuple(range(
+                1, coeffs_dict[0].ndim)) if self.multichannel else None
+            data = pywt.waverecn(coeffs=coeffs_dict,
+                                 wavelet=self.transform,
+                                 mode='zero',
+                                 axes=axes)
         if dtype == "array":
             return data
         return pysap.Image(data=data)
@@ -131,7 +149,7 @@ class pyWavelet3(object):
             the L2 norm.
         """
         # Create fake data
-        print(shape)
+        (shape)
         shape = numpy.asarray(shape)
         shape += shape % 2
         fake_data = numpy.zeros(shape)

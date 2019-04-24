@@ -58,14 +58,14 @@ kspace_data = fourier_op_gen.op(Iref)
 image_rec0 = fourier_op_gen.adj_op(kspace_data)
 imshow3D(np.abs(image_rec0), display=True)
 
-max_iter = 100
+max_iter = 300
 
 linear_op = pyWavelet3(wavelet_name="sym8",
                        nb_scale=3)
 
 
-fourier_op = NFFT3(samples=samples, shape=Iref.shape)
-# fourier_op = NUFFT(samples=samples, shape=Iref.shape, platform='mcpu')
+# fourier_op = NFFT3(samples=samples, shape=Iref.shape)
+fourier_op = NUFFT(samples=samples, shape=Iref.shape, platform='gpu')
 
 print('Starting Lipschitz constant computation')
 
