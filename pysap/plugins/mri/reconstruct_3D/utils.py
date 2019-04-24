@@ -196,7 +196,7 @@ def unflatten_swtn(y, shape, multichannel=False):
     return x
 
 
-def flatten_wave(x):
+def flatten_wave(x, multichannel=False):
     """ Flatten list an array.
 
     Parameters
@@ -217,21 +217,34 @@ def flatten_wave(x):
         x = [x]
     elif len(x) == 0:
         return None, None
+    if multichannel:
+        channel = x[0].shape[0]
+        shape_dict = [x[0].shape]
+        y = x[0].reshape(channel, np.prod(x[0].shape[1:]))
+        for x_i in x[1:]:
+            dict_lvl = []
+            for key in x_i.keys():
+                dict_lvl.append((key, x_i[key].shape))
+                y = np.concatenate((y, x_i[key].reshape(
+                    channel,
+                    np.prod(x_i[key].shape[1:]))), axis=-1)
+            shape_dict.append(dict_lvl)
 
-    # Flatten the dataset
-    y = x[0].flatten()
-    shape_dict = [x[0].shape]
-    for x_i in x[1:]:
-        dict_lvl = []
-        for key in x_i.keys():
-            dict_lvl.append((key, x_i[key].shape))
-            y = np.concatenate((y, x_i[key].flatten()))
-        shape_dict.append(dict_lvl)
+    else:
+        # Flatten the dataset
+        y = x[0].flatten()
+        shape_dict = [x[0].shape]
+        for x_i in x[1:]:
+            dict_lvl = []
+            for key in x_i.keys():
+                dict_lvl.append((key, x_i[key].shape))
+                y = np.concatenate((y, x_i[key].flatten()))
+            shape_dict.append(dict_lvl)
 
     return y, shape_dict
 
 
-def unflatten_wave(y, shape):
+def unflatten_wave(y, shape, multichannel=False):
     """ Unflatten a flattened array.
 
     Parameters
@@ -246,19 +259,35 @@ def unflatten_wave(y, shape):
     x: list of ndarray
         the unflattened dataset.
     """
-    # Unflatten the dataset
-    start = 0
-    stop = np.prod(shape[0])
-    x = [y[start:stop].reshape(shape[0])]
-    offset = stop
-    for shape_i in shape[1:]:
-        sublevel = {}
-        for key, value in shape_i:
-            start = offset
-            stop = offset + np.prod(value)
-            offset = stop
-            sublevel[key] = y[start: stop].reshape(value)
-        x.append(sublevel)
+    if multichannel:
+        # Unflatten the dataset
+        start = 0
+        stop = np.prod(shape[0][1:])
+        x = [y[:, start:stop].reshape(shape[0])]
+        offset = stop
+        for shape_i in shape[1:]:
+            sublevel = {}
+            for key, value in shape_i:
+                start = offset
+                stop = offset + np.prod(value[1:])
+                offset = stop
+                sublevel[key] = y[:, start: stop].reshape(value)
+            x.append(sublevel)
+    else:
+        # Unflatten the dataset
+        start = 0
+        stop = np.prod(shape[0])
+        x = [y[start:stop].reshape(shape[0])]
+        offset = stop
+        for shape_i in shape[1:]:
+            sublevel = {}
+            for key, value in shape_i:
+                start = offset
+                stop = offset + np.prod(value)
+                offset = stop
+                sublevel[key] = y[start: stop].reshape(value)
+            x.append(sublevel)
+
     return x
 
 
