@@ -275,8 +275,6 @@ class NUFFT(FourierBase, Singleton):
                                radix=None)
 
         elif self.platform == 'gpu':
-            Singleton.__init__(self)
-
             warn('Attemping to use Cuda plateform. Make sure to '
                  'have  all the dependecies installed and '
                  'to create only one instance of NUFFT GPU')
@@ -295,6 +293,7 @@ class NUFFT(FourierBase, Singleton):
                                batch=1,  # self.nb_coils,
                                ft_axes=tuple(range(samples.shape[1])),
                                radix=None)
+            Singleton.__init__(self)
 
         else:
             raise ValueError('Wrong type of platform. Platform must be'
@@ -342,7 +341,7 @@ class NUFFT(FourierBase, Singleton):
                     gy = self.nufftObj.forward(gx)
                     y.append(np.squeeze(gy.get()))
                 y = np.asarray(y)
-        return y * 1.0 / np.sqrt(np.prod(self.shape))
+        return y * 1.0 / np.sqrt(np.prod(self.Kd))
 
     def adj_op(self, x):
         """ This method calculates inverse masked non-uniform Fourier
@@ -379,4 +378,4 @@ class NUFFT(FourierBase, Singleton):
                     gx = self.nufftObj.adjoint(cuda_array)
                     img.append(gx.get())
                 img = np.asarray(np.squeeze(img))
-        return img * np.sqrt(np.prod(self.shape))
+        return img * np.sqrt(np.prod(self.Kd))
