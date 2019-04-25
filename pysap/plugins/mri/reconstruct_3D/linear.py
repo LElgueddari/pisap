@@ -115,9 +115,9 @@ class pyWavelet3(object):
             the reconstructed data.
         """
         if self.coeffs_shape is None:
-            raise ValueError("The attributes coeffs_shape must be instanciated",
-                             "you can do it by callin linear_op.op with the",
-                             " right dimension")
+            raise ValueError("The attributes coeffs_shape must be",
+                             " instanciated you can do it by calling",
+                             " linear_op.op with the right dimension")
         self.coeffs = coeffs
         coeffs_dict = self.unflatten(coeffs, self.coeffs_shape,
                                      multichannel=self.multichannel)
