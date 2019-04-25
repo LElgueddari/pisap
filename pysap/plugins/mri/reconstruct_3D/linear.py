@@ -28,7 +28,7 @@ class pyWavelet3(object):
     """ The 3D wavelet transform class from pyWavelets package.
     """
     def __init__(self, wavelet_name, nb_scale=4, verbose=0, undecimated=False,
-                 multichannel=False, num_cores=1):
+                 multichannel=False):
         """ Initialize the 'pyWavelet3' class.
             (x_new.shape)
         Parameters
@@ -47,8 +47,7 @@ class pyWavelet3(object):
             raise ValueError(
                 "Unknown transformation '{0}'.".format(wavelet_name))
         self.transform = pywt.Wavelet(wavelet_name)
-        self.nb_scale = nb_scale-1
-        self.num_cores = num_cores
+        self.nb_scale = nb_scale - 1
         self.undecimated = undecimated
         self.multichannel = multichannel
         self.unflatten = unflatten_swtn if undecimated else unflatten_wave
