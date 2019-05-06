@@ -513,6 +513,17 @@ class OWL(object):
             start = stop
         return output
 
+    def _reshape_mode_scale(self, data):
+        output = []
+        start = 0
+        n_channel = data.shape[0]
+        for scale_shape_idx in self.scale_shape:
+            n_coeffs = int(scale_shape_idx/n_channel)
+            stop = start + n_coeffs
+            output.append(np.reshape(data[:, start: stop], (n_channel*n_coeffs)))
+            start = stop
+        return output
+
     def op(self, data, extra_factor=1.0):
         """
         Define the proximity operator of the OWL norm
