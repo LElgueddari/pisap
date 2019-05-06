@@ -465,6 +465,7 @@ class OWL(object):
                                 self.band_shape.append(sub_band_shape)
                                 self.weights.append(_oscar_weights(
                                     alpha, beta, np.prod(sub_band_shape)))
+                elif self.mode == 'scale_based':
                 elif self.mode == 'coeff_based':
                     self.weights = _oscar_weights(alpha, beta, n_channel)
                 else:
@@ -488,7 +489,7 @@ class OWL(object):
 
         return sign_data * data_abs
 
-    def _reshape_mode_based(self, data):
+    def _reshape_mode_band(self, data):
         output = []
         start = 0
         n_channel = data.shape[0]
@@ -509,7 +510,7 @@ class OWL(object):
                                 data.shape)
             return output
         elif self.mode is 'band_based':
-            data_r = self._reshape_mode_based(data)
+            data_r = self._reshape_mode_band(data)
             output = []
             output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
                         data=data_band,
@@ -555,7 +556,7 @@ class OWL(object):
         if self.mode is 'all':
             return self._cost(self.weights, data.flatten())
         elif self.mode is 'band_based':
-            data_r = self._reshape_mode_based(data)
+            data_r = self._reshape_mode_band(data)
             output = []
             output = Parallel(n_jobs=self.num_cores)(delayed(self._cost)(
                         data=data_band,
