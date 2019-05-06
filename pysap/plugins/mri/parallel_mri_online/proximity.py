@@ -448,11 +448,11 @@ class OWL(object):
             if bands_shape is None:
                 raise('Data size must be specified if OSCAR is used')
             else:
-                if self.mode is 'all':
+                if self.mode == 'all':
                     data_shape = bands_shape
                     self.weights = np.reshape(_oscar_weights(alpha, beta,
                                                   data_shape * n_channel), (n_channel, data_shape))
-                elif self.mode is 'band_based':
+                elif self.mode == 'band_based':
                     self.weights = []
                     self.band_shape = []
                     for band_shape in bands_shape:
@@ -465,7 +465,7 @@ class OWL(object):
                                 self.band_shape.append(sub_band_shape)
                                 self.weights.append(_oscar_weights(
                                     alpha, beta, np.prod(sub_band_shape)))
-                elif self.mode is 'coeff_based':
+                elif self.mode == 'coeff_based':
                     self.weights = _oscar_weights(alpha, beta, n_channel)
                 else:
                     raise AttributeError("Unknow mode, please choose between: 'all', 'band_based' and 'coeff_based'")
