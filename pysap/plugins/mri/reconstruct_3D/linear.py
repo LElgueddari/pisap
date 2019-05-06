@@ -47,7 +47,7 @@ class pyWavelet3(object):
             raise ValueError(
                 "Unknown transformation '{0}'.".format(wavelet_name))
         self.transform = pywt.Wavelet(wavelet_name)
-        self.nb_scale = nb_scale - 1
+        self.nb_scale = nb_scale
         self.undecimated = undecimated
         self.multichannel = multichannel
         self.unflatten = unflatten_swtn if undecimated else unflatten_wave
@@ -77,18 +77,33 @@ class pyWavelet3(object):
         """
         # if isinstance(data, numpy.ndarray):
         #     data = pysap.Image(data=data)
-        axes = tuple(range(1, data.ndim)) if self.multichannel else None
+        axes = tuple(range(1, data.ndim)) if self.multichannel else range(data.ndim)
         if self.undecimated:
             warnings.warn('Data size should a power of 2')
+            # Check scale parameter
+            test = numpy.asarray([self.nb_scale > pywt.swt_max_level(
+                data.shape[axes_i]) for axes_i in axes])
+            if self.nb_scale <= 0 or test.any():
+                raise ValueError("The number of decomposition scale must",
+                                 " between 1 and ",
+                                 [pywt.swt_max_level(data.shape[axes_i]) for
+                                 axes_i in axes])
             coeffs_dict = pywt.swtn(data,
                                     self.transform,
                                     level=self.nb_scale,
                                     axes=axes)
         else:
+            test = numpy.asarray([self.nb_scale > pywt.dwt_max_level(
+                data.shape[axes_i], self.transform) for axes_i in axes])
+            if self.nb_scale <= 0 or test.any():
+                raise ValueError("The number of decomposition scale must",
+                                 " between 1 and ",
+                                 numpy.min(numpy.asarray([pywt.dwt_max_level(
+                                    data.shape[axes_i]) for axes_i in axes])))
             coeffs_dict = pywt.wavedecn(data,
                                         self.transform,
                                         level=self.nb_scale,
-                                        mode='zero',
+                                        mode='periodization',
                                         axes=axes)
         self.coeffs, self.coeffs_shape = self.flatten(
             coeffs_dict,
@@ -132,7 +147,7 @@ class pyWavelet3(object):
                 1, coeffs_dict[0].ndim)) if self.multichannel else None
             data = pywt.waverecn(coeffs=coeffs_dict,
                                  wavelet=self.transform,
-                                 mode='zero',
+                                 mode='periodization',
                                  axes=axes)
         if dtype == "array":
             return data
