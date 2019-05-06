@@ -517,12 +517,12 @@ class OWL(object):
         """
         Define the proximity operator of the OWL norm
         """
-        if self.mode is 'all':
+        if self.mode == 'all':
             threshold = self.weights.flatten() * extra_factor
             output = np.reshape(self._prox_owl(data.flatten(), threshold),
                                 data.shape)
             return output
-        elif self.mode is 'band_based':
+        elif self.mode == 'band_based':
             data_r = self._reshape_mode_band(data)
             output = []
             output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
@@ -539,7 +539,7 @@ class OWL(object):
                 reshaped_data[:, start : stop] = np.reshape(band_data, (n_channel, step))
                 start = stop
             output = np.asarray(reshaped_data).T
-        elif self.mode is 'coeff_based':
+        elif self.mode == 'coeff_based':
             threshold = self.weights * extra_factor
             output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
                         data=np.squeeze(data[:, idx]),
@@ -566,9 +566,9 @@ class OWL(object):
         -------
         The cost of this sparse code
         """
-        if self.mode is 'all':
+        if self.mode == 'all':
             return self._cost(self.weights, data.flatten())
-        elif self.mode is 'band_based':
+        elif self.mode == 'band_based':
             data_r = self._reshape_mode_band(data)
             output = []
             output = Parallel(n_jobs=self.num_cores)(delayed(self._cost)(
@@ -576,7 +576,7 @@ class OWL(object):
                         weights=weights)
                         for data_band, weights in zip(data_r, self.weights))
             return np.sum(np.asarray(output))
-        elif self.mode is 'coeff_based':
+        elif self.mode == 'coeff_based':
             output = Parallel(n_jobs=self.num_cores)(delayed(self._cost)(
                         data=np.squeeze(data[:, idx]),
                         weights=self.weights) for idx in range(data.shape[1]))
