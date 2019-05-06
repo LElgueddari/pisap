@@ -466,6 +466,19 @@ class OWL(object):
                                 self.weights.append(_oscar_weights(
                                     alpha, beta, np.prod(sub_band_shape)))
                 elif self.mode == 'scale_based':
+                    self.weights = []
+                    self.scale_shape = []
+                    tmp_scale_coarse = 0
+                    for band_shape in bands_shape:
+                        tmp_scale = 0
+                        if type(band_shape) is tuple:
+                            tmp_scale_coarse = np.prod(band_shape)
+                        elif type(band_shape) is list:
+                            for sub_band_name, sub_band_shape in band_shape:
+                                tmp_scale += np.prod(sub_band_shape) + tmp_scale_coarse
+                                tmp_scale_coarse = 0
+                            self.scale_shape.append(tmp_scale)
+                            self.weights.append(_oscar_weights(alpha, beta, tmp_scale))
                 elif self.mode == 'coeff_based':
                     self.weights = _oscar_weights(alpha, beta, n_channel)
                 else:
