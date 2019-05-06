@@ -550,6 +550,24 @@ class OWL(object):
                 reshaped_data[:, start : stop] = np.reshape(band_data, (n_channel, step))
                 start = stop
             output = np.asarray(reshaped_data).T
+
+        elif self.mode == 'scale_based':
+            data_r = self._reshape_mode_scale(data)
+            output = []
+            output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
+                        data=data_band,
+                        threshold=weights * extra_factor)
+                        for data_band, weights in zip(data_r, self.weights))
+            reshaped_data = np.zeros(data.shape, dtype=data.dtype)
+            start = 0
+            n_channel = data.shape[0]
+
+            for band_shape_idx, band_data in zip(self.scale_shape, output):
+                step = int(np.prod(band_shape_idx) / n_channel)
+                stop = start + step
+                reshaped_data[:, start : stop] = np.reshape(band_data, (n_channel, step))
+                start = stop
+            output = np.asarray(reshaped_data).T
         elif self.mode == 'coeff_based':
             threshold = self.weights * extra_factor
             output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
@@ -581,6 +599,14 @@ class OWL(object):
             return self._cost(self.weights, data.flatten())
         elif self.mode == 'band_based':
             data_r = self._reshape_mode_band(data)
+            output = []
+            output = Parallel(n_jobs=self.num_cores)(delayed(self._cost)(
+                        data=data_band,
+                        weights=weights)
+                        for data_band, weights in zip(data_r, self.weights))
+            return np.sum(np.asarray(output))
+        elif self.mode == 'scale_based':
+            data_r = self._reshape_mode_scale(data)
             output = []
             output = Parallel(n_jobs=self.num_cores)(delayed(self._cost)(
                         data=data_band,
