@@ -470,7 +470,8 @@ class OWL(object):
                 else:
                     raise AttributeError("Unknow mode, please choose between: 'all', 'band_based' and 'coeff_based'")
 
-    def _prox_owl(self, data, threshold):
+    @staticmethod
+    def _prox_owl(data, threshold):
         data_abs = np.abs(data)
         ix = np.argsort(np.squeeze(data_abs))[::-1]
         data_abs = data_abs[ix]  # Sorted absolute value of the data
@@ -532,7 +533,8 @@ class OWL(object):
                         threshold=threshold) for idx in range(data.shape[1]))
         return np.asarray(output).T
 
-    def _cost(sel, weights, data):
+    @staticmethod
+    def _cost(weights, data):
         """Implement the basic cost function of OWL
         Return sum(sorted(weights) * sorted(abs(data)))
         """
