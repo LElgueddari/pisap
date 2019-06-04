@@ -41,19 +41,20 @@ def virtual_coil_reconstruction(imgs):
     phase_reference = np.asarray([np.angle(np.sum(
         imgs[ch].flatten())) for ch in range(nch)])
     reference = np.asarray([(imgs[ch] / weights) / np.exp(1j * phase_reference[ch])
-                           for ch in range(32)])
+                           for ch in range(nch)])
     virtual_coil = np.sum(reference, axis=0)
     difference_original_vs_virtual = np.asarray(
         [np.conjugate(imgs[ch]) * virtual_coil for ch in range(nch)])
-    hanning_1d = np.expand_dims(np.hanning(np.minimum(nx,ny)), 1)
-    hanning_2d = np.fft.fftshift(np.dot(hanning_1d, hanning_1d.T))
-    if nz == 1:
-        hanning_Nd = np.expand_dims(np.tile(hanning_2d, (nch, 1, 1)), -1)
-    else:
-        hanning_Nd = np.tile(hanning_2d, (nch, 1, 1, nz))
+    hanning_1d_nx = np.expand_dims(np.hanning(nx), 1)
+    hanning_1d_ny = np.expand_dims(np.hanning(ny), 1)
+    hanning_1d_nz = np.expand_dims(np.hanning(nz), 1)
+    hanning_2d = np.expand_dims(np.dot(hanning_1d_nx, hanning_1d_ny.T), -1)
+    hanning_3d = np.fft.fftshift(np.dot(hanning_2d, hanning_1d_nz.T))
+    hanning_Nd = np.tile(hanning_3d, (nch, 1, 1, 1))
     # Removing the background noise via low pass filtering
-    difference_original_vs_virtual = np.fft.ifft2(np.fft.fft2(
-        difference_original_vs_virtual, axes=(1, 2)) * hanning_Nd, axes=(1, 2))
+    difference_original_vs_virtual = np.fft.ifftn(np.fft.fftn(
+        difference_original_vs_virtual, axes=(1, 2, 3)) * hanning_Nd,
+        axes=(1, 2, 3))
     I = np.asarray([imgs[ch] * np.exp(1j * np.angle(
                     difference_original_vs_virtual[ch])) for ch in range(nch)])
     return np.sum(I, 0)
