@@ -448,11 +448,11 @@ class OWL(object):
             if bands_shape is None:
                 raise('Data size must be specified if OSCAR is used')
             else:
-                if self.mode is 'all':
+                if self.mode == 'all':
                     data_shape = bands_shape
                     self.weights = np.reshape(_oscar_weights(alpha, beta,
                                                   data_shape * n_channel), (n_channel, data_shape))
-                elif self.mode is 'band_based':
+                elif self.mode == 'band_based':
                     self.weights = []
                     self.band_shape = []
                     for band_shape in bands_shape:
@@ -465,7 +465,7 @@ class OWL(object):
                                 self.band_shape.append(sub_band_shape)
                                 self.weights.append(_oscar_weights(
                                     alpha, beta, np.prod(sub_band_shape)))
-                elif self.mode is 'coeff_based':
+                elif self.mode == 'coeff_based':
                     self.weights = _oscar_weights(alpha, beta, n_channel)
                 else:
                     raise AttributeError("Unknow mode, please choose between: 'all', 'band_based' and 'coeff_based'")
@@ -504,15 +504,15 @@ class OWL(object):
         """
         Define the proximity operator of the OWL norm
         """
-        if self.mode is 'all':
+        if self.mode == 'all':
             threshold = self.weights.flatten() * extra_factor
-            output = np.reshape(self._prox_owl(data.flatten(), threshold),
+            output = np.reshape(OWL._prox_owl(data.flatten(), threshold),
                                 data.shape)
             return output
-        elif self.mode is 'band_based':
+        elif self.mode == 'band_based':
             data_r = self._reshape_mode_based(data)
             output = []
-            output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
+            output = Parallel(n_jobs=self.num_cores)(delayed(OWL._prox_owl)(
                         data=data_band,
                         threshold=weights * extra_factor)
                         for data_band, weights in zip(data_r, self.weights))
@@ -526,9 +526,9 @@ class OWL(object):
                 reshaped_data[:, start : stop] = np.reshape(band_data, (n_channel, step))
                 start = stop
             output = np.asarray(reshaped_data).T
-        elif self.mode is 'coeff_based':
+        elif self.mode == 'coeff_based':
             threshold = self.weights * extra_factor
-            output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
+            output = Parallel(n_jobs=self.num_cores)(delayed(OWL._prox_owl)(
                         data=np.squeeze(data[:, idx]),
                         threshold=threshold) for idx in range(data.shape[1]))
         return np.asarray(output).T
@@ -554,9 +554,9 @@ class OWL(object):
         -------
         The cost of this sparse code
         """
-        if self.mode is 'all':
+        if self.mode == 'all':
             return self._cost(self.weights, data.flatten())
-        elif self.mode is 'band_based':
+        elif self.mode == 'band_based':
             data_r = self._reshape_mode_based(data)
             output = []
             output = Parallel(n_jobs=self.num_cores)(delayed(self._cost)(
@@ -564,7 +564,7 @@ class OWL(object):
                         weights=weights)
                         for data_band, weights in zip(data_r, self.weights))
             return np.sum(np.asarray(output))
-        elif self.mode is 'coeff_based':
+        elif self.mode == 'coeff_based':
             output = Parallel(n_jobs=self.num_cores)(delayed(self._cost)(
                         data=np.squeeze(data[:, idx]),
                         weights=self.weights) for idx in range(data.shape[1]))
