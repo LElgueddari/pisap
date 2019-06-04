@@ -621,6 +621,7 @@ def sparse_rec_pogm(gradient_op, linear_op, prox_op, cost_op=None,
             for idx in range(max_nb_of_iter):
                 opt.idx = idx
                 opt._update()
+                bar.update(idx)
                 costs.append(gradient_op.cost(opt._x_new) + prox_op.cost(opt._x_new))
     # retrieve metrics results
     opt.retrieve_outputs()
