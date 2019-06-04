@@ -86,7 +86,8 @@ class pyWavelet3(object):
             if self.nb_scale <= 0 or test.any():
                 raise ValueError("The number of decomposition scale must",
                                  " between 1 and ",
-                                 [pywt.swt_max_level(data.shape[axes_i]) for
+                                 [pywt.swt_max_level(data.shape[axes_i],
+                                 self.transform) for
                                  axes_i in axes])
             coeffs_dict = pywt.swtn(data,
                                     self.transform,
@@ -99,7 +100,8 @@ class pyWavelet3(object):
                 raise ValueError("The number of decomposition scale must",
                                  " between 1 and ",
                                  numpy.min(numpy.asarray([pywt.dwt_max_level(
-                                    data.shape[axes_i]) for axes_i in axes])))
+                                    data.shape[axes_i],
+                                    self.transform) for axes_i in axes])))
             coeffs_dict = pywt.wavedecn(data,
                                         self.transform,
                                         level=self.nb_scale,
