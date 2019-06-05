@@ -622,7 +622,9 @@ def sparse_rec_pogm(gradient_op, linear_op, prox_op, cost_op=None,
                 opt.idx = idx
                 opt._update()
                 bar.update(idx)
-                costs.append(gradient_op.cost(opt._x_new) + prox_op.cost(opt._x_new))
+                if idx % 10 == 0 and idx > 0:
+                    np.save('uncomplete_rslt', gradient_op.linear_op.adj_op(opt._x_new))
+                # costs.append(gradient_op.cost(opt._x_new) + prox_op.cost(opt._x_new))
     # retrieve metrics results
     opt.retrieve_outputs()
     # rename outputs as attributes
