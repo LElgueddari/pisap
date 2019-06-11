@@ -484,7 +484,8 @@ class OWL(object):
                 else:
                     raise AttributeError("Unknow mode, please choose between: 'all', 'band_based' and 'coeff_based'")
 
-    def _prox_owl(self, data, threshold):
+    @staticmethod
+    def _prox_owl(data, threshold):
         data_abs = np.abs(data)
         ix = np.argsort(np.squeeze(data_abs))[::-1]
         data_abs = data_abs[ix]  # Sorted absolute value of the data
@@ -536,7 +537,7 @@ class OWL(object):
         elif self.mode == 'band_based':
             data_r = self._reshape_mode_band(data)
             output = []
-            output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
+            output = Parallel(n_jobs=self.num_cores)(delayed(OWL._prox_owl)(
                         data=data_band,
                         threshold=weights * extra_factor)
                         for data_band, weights in zip(data_r, self.weights))
@@ -554,7 +555,7 @@ class OWL(object):
         elif self.mode == 'scale_based':
             data_r = self._reshape_mode_scale(data)
             output = []
-            output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
+            output = Parallel(n_jobs=self.num_cores)(delayed(OWL._prox_owl)(
                         data=data_band,
                         threshold=weights * extra_factor)
                         for data_band, weights in zip(data_r, self.weights))
@@ -570,7 +571,7 @@ class OWL(object):
             output = np.asarray(reshaped_data).T
         elif self.mode == 'coeff_based':
             threshold = self.weights * extra_factor
-            output = Parallel(n_jobs=self.num_cores)(delayed(self._prox_owl)(
+            output = Parallel(n_jobs=self.num_cores)(delayed(OWL._prox_owl)(
                         data=np.squeeze(data[:, idx]),
                         threshold=threshold) for idx in range(data.shape[1]))
         return np.asarray(output).T
