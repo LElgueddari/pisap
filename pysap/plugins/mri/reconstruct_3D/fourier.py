@@ -196,7 +196,7 @@ class NUFFT(FourierBase, Singleton):
     numOfInstances = 0
 
     def __init__(self, samples, shape, platform='cpu', Kd=None, Jd=None,
-                 n_coils=1, verbosity=0):
+                 n_coils=1, verbosity=0, kspace_mask=None):
         """ Initilize the 'NUFFT' class.
 
         Parameters
@@ -228,7 +228,7 @@ class NUFFT(FourierBase, Singleton):
         self.samples = samples * (2 * np.pi)  # Pynufft use samples in
         # [-pi, pi[ instead of [-0.5, 0.5[
         self.dim = samples.shape[1]  # number of dimensions of the image
-
+        self.kspace_mask = kspace_mask if not None else 1
         if type(Kd) == int:
             self.Kd = (Kd,)*self.dim
         elif type(Kd) == tuple:
@@ -324,7 +324,7 @@ class NUFFT(FourierBase, Singleton):
                 gx = self.nufftObj.thr.copy_array(self.nufftObj.x_Nd)
                 # Forward operator of the NUFFT
                 gy = self.nufftObj.forward(gx)
-                y = np.squeeze(gy.get())
+                y = np.squeeze(gy.get()) * self.kspace_mask
         else:
             if (self.platform == 'cpu'):
                 y = np.moveaxis(self.nufftObj.forward(np.copy(np.moveaxis(
@@ -339,7 +339,7 @@ class NUFFT(FourierBase, Singleton):
                     gx = self.nufftObj.thr.copy_array(self.nufftObj.x_Nd)
                     # Forward operator of the NUFFT
                     gy = self.nufftObj.forward(gx)
-                    y.append(np.squeeze(gy.get()))
+                    y.append(np.squeeze(gy.get()) * self.kspace_mask)
                 y = np.asarray(y)
         return y * 1.0 / np.sqrt(np.prod(self.Kd))
 
@@ -362,7 +362,7 @@ class NUFFT(FourierBase, Singleton):
                 img = np.squeeze(self.nufftObj.adjoint(x))
             else:
                 dtype = np.complex64
-                cuda_array = self.nufftObj.thr.to_device(x.astype(dtype))
+                cuda_array = self.nufftObj.thr.to_device((x * self.kspace_mask).astype(dtype))
                 gx = self.nufftObj.adjoint(cuda_array)
                 img = np.squeeze(gx.get())
         else:
@@ -374,7 +374,7 @@ class NUFFT(FourierBase, Singleton):
                 img = []
                 for ch in range(self.nb_coils):
                     cuda_array = self.nufftObj.thr.to_device(np.copy(
-                        x[ch]).astype(dtype))
+                        x[ch] * self.kspace_mask).astype(dtype))
                     gx = self.nufftObj.adjoint(cuda_array)
                     img.append(gx.get())
                 img = np.asarray(np.squeeze(img))
