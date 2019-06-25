@@ -35,7 +35,7 @@ class Grad2D_pMRI_analysis(GradBasic, PowerMethod):
     S: np.ndarray
         sensitivity matrix
     """
-    def __init__(self, data, fourier_op):
+    def __init__(self, data, fourier_op, spec_rad=None):
         """ Initilize the 'GradSynthesis2' class.
         """
 
@@ -44,7 +44,11 @@ class Grad2D_pMRI_analysis(GradBasic, PowerMethod):
                            self._analy_rsns_op_method)
         PowerMethod.__init__(self, self.trans_op_op, (data.shape[0], *fourier_op.shape),
                              data_type="complex128", auto_run=False)
-        self.get_spec_rad(extra_factor=1.1)
+        if spec_rad is None:
+            self.get_spec_rad(extra_factor=1.1)
+        else:
+            self.spec_rad = spec_rad
+            self.inv_spec_rad = 1.0 / spec_rad
 
     def _analy_op_method(self, x):
         """ MX operation.
@@ -105,7 +109,7 @@ class Grad2D_pMRI_synthesis(GradBasic, PowerMethod):
     S: np.ndarray  (image_shape, L)
         The sensitivity maps of size.
     """
-    def __init__(self, data, fourier_op, linear_op):
+    def __init__(self, data, fourier_op, linear_op, spec_rad=None):
         """ Initilize the 'GradSynthesis2' class.
         """
 
@@ -118,7 +122,11 @@ class Grad2D_pMRI_synthesis(GradBasic, PowerMethod):
         self.linear_op_coeffs_shape = coef.shape
         PowerMethod.__init__(self, self.trans_op_op, self.linear_op_coeffs_shape,
                              data_type="complex128", auto_run=False)
-        self.get_spec_rad(extra_factor=1.1)
+        if gradient_spec_rad is None:
+            self.get_spec_rad(extra_factor=1.1)
+        else:
+            self.spec_rad = spec_rad
+            self.inv_spec_rad = 1.0 / spec_rad
 
     def _synth_op_method(self, x):
         """ MX operation.
@@ -175,7 +183,8 @@ class Grad2D_pMRI(Grad2D_pMRI_analysis, Grad2D_pMRI_synthesis):
     * (1/2) * (||Ft x - yl||^2_2,l)
     * (1/2) * (||Ft L* alpha - yl||^2_2,l)
     """
-    def __init__(self, data, fourier_op, linear_op=None, check_lips=False):
+    def __init__(self, data, fourier_op, linear_op=None, check_lips=False,
+                 gradient_spec_rad=None):
         """ Initilize the 'Grad2D_pMRI' class.
 
         Parameters
@@ -188,12 +197,14 @@ class Grad2D_pMRI(Grad2D_pMRI_analysis, Grad2D_pMRI_synthesis):
             a Linear operator instance.
         """
         if linear_op is None:
-            Grad2D_pMRI_analysis.__init__(self, data, fourier_op)
+            Grad2D_pMRI_analysis.__init__(self, data, fourier_op,
+                                          spec_rad=gradient_spec_rad)
             if check_lips:
                 xinit_shape = fourier_op.img_shape
             self.analysis = True
         else:
-            Grad2D_pMRI_synthesis.__init__(self, data, fourier_op, linear_op)
+            Grad2D_pMRI_synthesis.__init__(self, data, fourier_op, linear_op,
+                                           spec_rad=gradient_spec_rad)
             if check_lips:
                 xinit_shape = self.linear_op_coeffs_shape
 

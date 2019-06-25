@@ -102,7 +102,7 @@ class PyWaveletTransformBase(WaveletTransformBase):
             the decomposition associated information.
         """
         if self.is_decimated:
-            coeffs = pywt.wavedecn(data, self.trf, mode="symmetric",
+            coeffs = pywt.wavedecn(data, self.trf, mode="periodization",
                                    level=self.nb_scale, axes=self.axes)
         else:
             coeffs = pywt.swtn(data, self.trf, level=self.nb_scale,
@@ -130,7 +130,7 @@ class PyWaveletTransformBase(WaveletTransformBase):
         """
         coeffs = self._organize_pywt(analysis_data, analysis_header)
         if self.is_decimated:
-            data = pywt.waverecn(coeffs, self.trf, mode="symmetric",
+            data = pywt.waverecn(coeffs, self.trf, mode="periodization",
                                  axes=self.axes)
         else:
             data = pywt.iswtn(coeffs, self.trf, axes=self.axes)
