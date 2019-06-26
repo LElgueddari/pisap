@@ -69,9 +69,10 @@ class Grad2D_pMRI_analysis(GradBasic, PowerMethod):
         result: np.ndarray
             the operation result (the recovered kspace).
         """
-        data = []
-        [data.append(self.fourier_op.op(x[channel]))
-            for channel in range(x.shape[0])]
+        data = self.fourier_op.op(x)
+        # data = []
+        # [data.append(self.fourier_op.op(x[channel]))
+        #     for channel in range(x.shape[0])]
         return np.asarray(data)
 
     def _analy_rsns_op_method(self, x):
@@ -90,9 +91,7 @@ class Grad2D_pMRI_analysis(GradBasic, PowerMethod):
         result: np.ndarray
             the operation result.
         """
-        img = []
-        [img.append(self.fourier_op.adj_op(x[channel]))
-            for channel in range(x.shape[0])]
+        img = self.fourier_op.adj_op(x)
         return np.asarray(img)
 
 

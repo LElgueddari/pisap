@@ -270,7 +270,7 @@ class NUFFT(FourierBase, Singleton):
                                Nd=self.shape,
                                Kd=self.Kd,
                                Jd=self.Jd,
-                               batch=1,  # self.nb_coils,
+                               batch=self.nb_coils,
                                ft_axes=tuple(range(samples.shape[1])),
                                radix=None)
 
@@ -290,7 +290,7 @@ class NUFFT(FourierBase, Singleton):
                                Nd=self.shape,
                                Kd=self.Kd,
                                Jd=self.Jd,
-                               batch=1,  # self.nb_coils,
+                               batch=self.nb_coils,
                                ft_axes=tuple(range(samples.shape[1])),
                                radix=None)
             Singleton.__init__(self)
@@ -332,15 +332,12 @@ class NUFFT(FourierBase, Singleton):
             else:
                 dtype = np.complex64
                 # Send data to the mCPU/GPU platform
-                y = []
-                for ch in range(self.nb_coils):
-                    self.nufftObj.x_Nd = self.nufftObj.thr.to_device(
-                        np.copy(img[ch]).astype(dtype))
-                    gx = self.nufftObj.thr.copy_array(self.nufftObj.x_Nd)
-                    # Forward operator of the NUFFT
-                    gy = self.nufftObj.forward(gx)
-                    y.append(np.squeeze(gy.get()) * self.kspace_mask)
-                y = np.asarray(y)
+                self.nufftObj.x_Nd = self.nufftObj.thr.to_device(
+                    np.copy(np.moveaxis(img.astype(dtype), 0, -1), order='C'))
+                gx = self.nufftObj.thr.copy_array(self.nufftObj.x_Nd)
+                # Forward operator of the NUFFT
+                gy = self.nufftObj.forward(gx)
+                y = np.squeeze(np.moveaxis(gy.get(), -1, 0)) * self.kspace_mask
         return y * 1.0 / np.sqrt(np.prod(self.Kd))
 
     def adj_op(self, x):
@@ -362,20 +359,17 @@ class NUFFT(FourierBase, Singleton):
                 img = np.squeeze(self.nufftObj.adjoint(x))
             else:
                 dtype = np.complex64
-                cuda_array = self.nufftObj.thr.to_device((x * self.kspace_mask).astype(dtype))
+                cuda_array = self.nufftObj.thr.to_device((x*self.kspace_mask).astype(dtype))
                 gx = self.nufftObj.adjoint(cuda_array)
                 img = np.squeeze(gx.get())
         else:
             if self.platform == 'cpu':
-                img = np.moveaxis(self.nufftObj.adjoint(np.moveaxis(x, 0, -1)),
+                img = np.moveaxis(self.nufftObj.adjoint(np.moveaxis(x*self.kspace_mask, 0, -1)),
                                   -1, 0)
             else:
                 dtype = np.complex64
-                img = []
-                for ch in range(self.nb_coils):
-                    cuda_array = self.nufftObj.thr.to_device(np.copy(
-                        x[ch] * self.kspace_mask).astype(dtype))
-                    gx = self.nufftObj.adjoint(cuda_array)
-                    img.append(gx.get())
-                img = np.asarray(np.squeeze(img))
+                cuda_array = self.nufftObj.thr.to_device(np.copy(np.moveaxis((x*
+                                self.kspace_mask), 0, -1), order='C').astype(dtype))
+                gx = self.nufftObj.adjoint(cuda_array)
+                img = np.moveaxis(np.squeeze(gx.get()), -1, 0)
         return img * np.sqrt(np.prod(self.Kd))
