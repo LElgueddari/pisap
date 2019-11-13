@@ -72,7 +72,8 @@ Make sure you have installed all the dependencies listed above properly.
 Further instructions are available at
 https://cea-cosmic.github.io/pysap/generated/installation.html
 
-
+Check if your installation is correct by running
+`python -c 'import pysap; pysap.info()'`
 Mac OS
 ------
 

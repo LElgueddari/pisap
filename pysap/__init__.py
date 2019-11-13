@@ -25,7 +25,3 @@ from pysap.configure import info
 from pysap.base.image import Image
 from pysap.utils import load_transform
 from pysap.utils import AVAILABLE_TRANSFORMS
-
-
-# Display a welcome message
-print(info())

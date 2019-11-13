@@ -73,4 +73,4 @@ def info():
     version = "Package version: {0}\n\n".format(__version__)
     license = "License: {0}\n\n".format(LICENSE)
     authors = "Authors: \n{0}\n".format(AUTHOR)
-    return logo() + "\n\n" + version + license + authors + dependencies
+    print(logo() + "\n\n" + version + license + authors + dependencies)
