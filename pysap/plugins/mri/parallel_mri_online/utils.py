@@ -468,3 +468,46 @@ def reshape_dwt2_channel_coeff(wavelet_coeff, linear_op):
         cD = tuple([cDh_all[ch], cDv_all[ch], cDd_all[ch]])
         coeffs.append((cA, cD))
     return coeffs
+
+def get_stacks_fourier(kspace_loc):
+    """Function that splits an incoming 3D stacked k-space samples
+    into a 2D non-Cartesian plane and the vector containing the z k-space
+    values of all the plane and converts to stacks of 2D. This function also
+    checks for any issues of the incoming k-space pattern and if the stack
+    property is not satisfied.
+    Stack Property: The k-space locations originate from a stack of 2D samples.
+    Parameters
+    ----------
+    ksapce_plane_loc: np.ndarray
+        the mask samples in the 3D Fourier domain.
+    Returns
+    ----------
+    ksapce_plane_loc: np.ndarray
+        A 2D array of samples which when stacked gives the 3D samples
+    z_sample_loc: np.ndarray
+        A 1D array of z-sample locations
+    sort_pos: np.ndarray
+        The sorting positions for opertor and inverse for incoming data
+    """
+    # Sort the incoming data based on Z, Y then X coordinates
+    # This is done for easier stacking
+    sort_pos = np.lexsort(tuple(kspace_loc[:, i]
+                                for i in np.arange(3)))
+    kspace_loc = kspace_loc[sort_pos]
+    first_stack_len = np.size(np.where(kspace_loc[:, 2]
+                                       == np.min(kspace_loc[:, 2])))
+    acq_num_slices = int(len(kspace_loc) / first_stack_len)
+    stacked = np.reshape(kspace_loc, (acq_num_slices,
+                                      first_stack_len, 3))
+    z_expected_stacked = np.reshape(np.repeat(stacked[:, 0, 2],
+                                              first_stack_len),
+                                    (acq_num_slices,
+                                     first_stack_len))
+    if np.mod(len(kspace_loc), first_stack_len) \
+            or not np.all(stacked[:, :, 0:2] == stacked[0, :, 0:2]) \
+            or not np.all(stacked[:, :, 2] == z_expected_stacked):
+        raise ValueError('The input must be a stack of 2D k-Space data')
+    ksapce_plane_loc = stacked[0, :, 0:2]
+    z_sample_loc = stacked[:, 0, 2]
+    z_sample_loc = z_sample_loc[:, np.newaxis]
+    return ksapce_plane_loc, z_sample_loc, sort_pos

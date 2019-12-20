@@ -34,9 +34,9 @@ from modopt.opt.reweight import cwbReweight
 import progressbar
 
 
-def sparse_rec_fista(gradient_op, linear_op, prox_op, mu, lambda_init=1.0,
-                     max_nb_of_iter=300, atol=1e-4, verbose=0, get_cost=False,
-                     I_ref=None, real_gradient=None, mask=None):
+def sparse_rec_fista(gradient_op, linear_op, prox_op, output_filename,
+                     lambda_init=1.0, max_nb_of_iter=300, atol=1e-4, verbose=0,
+                     get_cost=False, I_ref=None, real_gradient=None, mask=None):
     """ The FISTA sparse reconstruction without reweightings.
 
     .. note:: At the moment, supports only 2D data.
@@ -85,7 +85,6 @@ def sparse_rec_fista(gradient_op, linear_op, prox_op, mu, lambda_init=1.0,
     # Welcome message
     if verbose > 0:
         print(fista_logo())
-        print(" - mu: ", mu)
         print(" - lipschitz constant: ", gradient_op.spec_rad)
         print(" - data: ", gradient_op.obs_data.shape)
         print(" - max iterations: ", max_nb_of_iter)
@@ -113,6 +112,8 @@ def sparse_rec_fista(gradient_op, linear_op, prox_op, mu, lambda_init=1.0,
     if get_cost:
         cost = np.zeros(max_nb_of_iter)
 
+    import pickle as pkl
+
     if I_ref is None and real_gradient is None:
 
         with progressbar.ProgressBar(redirect_stdout=True,
@@ -120,14 +121,10 @@ def sparse_rec_fista(gradient_op, linear_op, prox_op, mu, lambda_init=1.0,
             for idx in range(max_nb_of_iter):
                 opt._update()
                 bar.update(idx)
-                if get_cost:
-                    cost[idx] = gradient_op.cost(opt._x_new) + \
-                              prox_op.cost(opt._x_new)
-                if opt.converge:
-                    print(' - Converged!')
-                    if get_cost:
-                        cost = cost[0:idx]
-                    break
+                if idx % 10 == 0 and idx > 0:
+                    pkl.dump((gradient_op.linear_op.adj_op(opt._x_new)),
+                             open(output_filename + 'uncomplete_rslt_' + str(idx) + '.pkl', 'wb'),
+                             protocol=4)
 
         opt.x_final = opt._x_new
         end = time.clock()
@@ -430,111 +427,9 @@ def sparse_rec_condatvu(gradient_op, linear_op, prox_dual_op, std_est=None,
 
     return x_final, opt.y_final
 
-def sparse_rec_pogm(gradient_op, linear_op, prox_op, mu, cost_op=None,
-                    max_nb_of_iter=300, metric_call_period=5, sigma_bar=0.96,
-                    metrics=None, verbose=0):
-    """
-    Perform sparse reconstruction using the POGM algorithm.
-    Parameters
-    ----------
-    gradient_op: instance of class GradBase
-        the gradient operator.
-    linear_op: instance of LinearBase
-        the linear operator: seek the sparsity, ie. a wavelet transform.
-    prox_op: instance of ProximityParent
-        the proximal operator.
-    mu: float
-       coefficient of regularization.
-    cost_op: instance of costObj, (default None)
-        the cost function used to check for convergence during the
-        optimization.
-    lambda_init: float, (default 1.0)
-        initial value for the FISTA step.
-    max_nb_of_iter: int (optional, default 300)
-        the maximum number of iterations in the POGM algorithm.
-    metric_call_period: int (default 5)
-        the period on which the metrics are computed.
-    metrics: dict (optional, default None)
-        the list of desired convergence metrics: {'metric_name':
-        [@metric, metric_parameter]}. See modopt for the metrics API.
-    verbose: int (optional, default 0)
-        the verbosity level.
-    Returns
-    -------
-    x_final: ndarray
-        the estimated POGM solution.
-    costs: list of float
-        the cost function values.
-    metrics: dict
-        the requested metrics values during the optimization.
-    """
-    start = time.clock()
-
-    # Define the initial values
-    im_shape = gradient_op.fourier_op.shape
-    zeros_right_shape = linear_op.op(np.zeros(im_shape, dtype='complex128'))
-
-    # Welcome message
-    if verbose > 0:
-        # TODO: think of logo for POGM
-        print(" - mu: ", mu)
-        print(" - lipschitz constant: ", gradient_op.spec_rad)
-        print(" - data: ", gradient_op.fourier_op.shape)
-        if hasattr(linear_op, "nb_scale"):
-            print(" - wavelet: ", linear_op, "-", linear_op.nb_scale)
-        print(" - max iterations: ", max_nb_of_iter)
-        print(" - image variable shape: ", im_shape)
-        print("-" * 40)
-
-    # Set the prox weights
-    prox_op.weights = mu * np.ones_like(zeros_right_shape)
-
-    # Hyper-parameters
-    beta = gradient_op.inv_spec_rad
-
-    opt = POGM(
-        u=zeros_right_shape,
-        x=zeros_right_shape,
-        y=zeros_right_shape,
-        z=zeros_right_shape,
-        grad=gradient_op,
-        prox=prox_op,
-        cost=cost_op,
-        beta_param=beta,
-        sigma_bar=sigma_bar,
-        metric_call_period=metric_call_period,
-        metrics=metrics,
-        auto_iterate=False,
-    )
-
-    # Perform the reconstruction
-    if verbose > 0:
-        print("Starting optimization...")
-    opt.iterate(max_iter=max_nb_of_iter)
-    end = time.clock()
-    if verbose > 0:
-        # cost_op.plot_cost()
-        if hasattr(cost_op, "cost"):
-            print(" - final iteration number: ", cost_op._iteration)
-            print(" - final log10 cost value: ", np.log10(cost_op.cost))
-        print(" - converged: ", opt.converge)
-        print("Done.")
-        print("Execution time: ", end - start, " seconds")
-        print("-" * 40)
-    x_final = opt.x_final
-    metrics = opt.metrics
-
-    if hasattr(cost_op, "cost"):
-        costs = cost_op._cost_list
-    else:
-        costs = None
-
-    return x_final, costs, metrics
-
-
 def sparse_rec_pogm(gradient_op, linear_op, prox_op, cost_op=None,
                     max_nb_of_iter=300, metric_call_period=5, sigma_bar=0.96,
-                    metrics=None, verbose=0):
+                    metrics=None, verbose=0, save_filename=None):
     """
     Perform sparse reconstruction using the POGM algorithm.
     Parameters
@@ -616,6 +511,7 @@ def sparse_rec_pogm(gradient_op, linear_op, prox_op, cost_op=None,
     costs.append(gradient_op.cost(zeros_right_shape) + prox_op.cost(zeros_right_shape))
 
     from progressbar import ProgressBar
+    import pickle as pkl
     with ProgressBar(redirect_stdout=True, max_value=max_nb_of_iter) as bar:
 
             for idx in range(max_nb_of_iter):
@@ -623,7 +519,9 @@ def sparse_rec_pogm(gradient_op, linear_op, prox_op, cost_op=None,
                 opt._update()
                 bar.update(idx)
                 if idx % 10 == 0 and idx > 0:
-                    np.save('uncomplete_rslt', gradient_op.linear_op.adj_op(opt._x_new))
+                    pkl.dump((gradient_op.linear_op.adj_op(opt._x_new)),
+                             open(output_filename + 'uncomplete_rslt.pkl', 'wb'),
+                             protocol=4)
                 # costs.append(gradient_op.cost(opt._x_new) + prox_op.cost(opt._x_new))
     # retrieve metrics results
     opt.retrieve_outputs()

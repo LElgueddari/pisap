@@ -48,7 +48,7 @@ class Grad2D_pMRI_analysis(GradBasic, PowerMethod):
                              data_type="complex128",
                              auto_run=False)
         if gradient_spec_rad is None:
-            self.get_spec_rad(extra_factor=1.1)
+            self.get_spec_rad(extra_factor=1.1, max_iter=10)
         else:
             self.spec_rad = gradient_spec_rad
             self.inv_spec_rad = 1.0 / self.spec_rad
@@ -220,7 +220,7 @@ class Grad2D_pMRI(Grad2D_pMRI_analysis, Grad2D_pMRI_synthesis):
             is_lips = check_lipschitz_cst(f=self.trans_op_op,
                                           x_shape=xinit_shape,
                                           lipschitz_cst=self.spec_rad,
-                                          max_nb_of_iter=2)
+                                          max_nb_of_iter=1)
             if not is_lips:
                 raise ValueError('The lipschitz constraint is not satisfied')
             else:
